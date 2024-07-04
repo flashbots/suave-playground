@@ -159,7 +159,8 @@ execute_command_add_PID "beacon_node.log" "lighthouse" \
 	--disable-packet-filter \
 	--target-peers 0 \
     --execution-endpoint http://localhost:5000 \
-    --execution-jwt $DATADIR/jwtsecret
+    --execution-jwt $DATADIR/jwtsecret \
+	--builder http://localhost:5555
 
 # Start VALIDATOR
 execute_command_add_PID "validator.log" "lighthouse" \
@@ -169,8 +170,10 @@ execute_command_add_PID "validator.log" "lighthouse" \
 	--testnet-dir $TESTNET_DIR \
 	--init-slashing-protection \
 	--beacon-nodes http://localhost:8000 \
-	--suggested-fee-recipient 0x690B9A9E9aa1C9dB991C7721a92d351Db4FaC990
+	--suggested-fee-recipient 0x690B9A9E9aa1C9dB991C7721a92d351Db4FaC990 \
+	--builder-proposals
 
 # Start mev-relay
-
-# Start mev-boost
+execute_command_add_PID "mev_boost_relay.log" "./mev-boost-relay/mev-boost-relay" \
+	--beacon-client-addr http://localhost:8000 \
+	--api-listen-port 5555

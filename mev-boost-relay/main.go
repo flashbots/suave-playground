@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/hex"
 	"flag"
 	"fmt"
 	"log"
@@ -9,10 +10,12 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
+	"github.com/flashbots/go-boost-utils/bls"
 	"github.com/flashbots/mev-boost-relay/beaconclient"
 	"github.com/flashbots/mev-boost-relay/common"
 	"github.com/flashbots/mev-boost-relay/database"
@@ -22,18 +25,24 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+var defaultSecretKey = "5eae315483f028b5cdd5d1090ff0c7618b18737ea9bf3c35047189db22835c48"
+
 // flags
 var (
 	logLevel         string
 	logJSON          bool
 	apiListenAddr    string
+	apiListenPort    uint64
+	apiSecretKey     string
 	beaconClientAddr string
 )
 
 func main() {
 	flag.StringVar(&logLevel, "log-level", "info", "log level")
 	flag.BoolVar(&logJSON, "log-json", false, "log as json")
-	flag.StringVar(&apiListenAddr, "api-listen-addr", "0.0.0.0:5656", "api listen address")
+	flag.StringVar(&apiListenAddr, "api-listen-addr", "0.0.0.0", "api listen address")
+	flag.Uint64Var(&apiListenPort, "api-listen-port", 8000, "api listen port")
+	flag.StringVar(&apiSecretKey, "api-secret", defaultSecretKey, "api secret")
 	flag.StringVar(&beaconClientAddr, "beacon-client-addr", "http://localhost:8000", "beacon client address")
 	flag.Parse()
 
@@ -85,13 +94,24 @@ func main() {
 		log.WithError(err).Fatalf("Failed setting up prod datastore")
 	}
 
+	// decode the secret key
+	envSkBytes, err := hex.DecodeString(strings.TrimPrefix(apiSecretKey, "0x"))
+	if err != nil {
+		log.WithError(err).Fatal("incorrect secret key provided")
+	}
+	secretKey, err := bls.SecretKeyFromBytes(envSkBytes[:])
+	if err != nil {
+		log.WithError(err).Fatal("incorrect builder API secret key provided")
+	}
+
 	apiOpts := api.RelayAPIOpts{
 		Log:          log,
-		ListenAddr:   apiListenAddr,
+		ListenAddr:   fmt.Sprintf("%s:%d", apiListenAddr, apiListenPort),
 		BeaconClient: bClient,
 		Datastore:    ds,
 		Redis:        redis,
 		DB:           pqDB,
+		SecretKey:    secretKey,
 		// EthNetDetails: *networkInfo, // TODO
 		BlockSimURL:     apiBlockSimURL,
 		ProposerAPI:     true,
