@@ -34,7 +34,7 @@ func main() {
 	flag.StringVar(&logLevel, "log-level", "info", "log level")
 	flag.BoolVar(&logJSON, "log-json", false, "log as json")
 	flag.StringVar(&apiListenAddr, "api-listen-addr", "0.0.0.0:5656", "api listen address")
-	flag.StringVar(&beaconClientAddr, "beacon-client-addr", "http://localhost:8545", "beacon client address")
+	flag.StringVar(&beaconClientAddr, "beacon-client-addr", "http://localhost:8000", "beacon client address")
 	flag.Parse()
 
 	log := common.LogSetup(logJSON, logLevel).WithFields(logrus.Fields{
@@ -93,7 +93,9 @@ func main() {
 		Redis:        redis,
 		DB:           pqDB,
 		// EthNetDetails: *networkInfo, // TODO
-		BlockSimURL: apiBlockSimURL,
+		BlockSimURL:     apiBlockSimURL,
+		ProposerAPI:     true,
+		BlockBuilderAPI: true,
 	}
 	apiSrv, err := api.NewRelayAPI(apiOpts)
 	if err != nil {
