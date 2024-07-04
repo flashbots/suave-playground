@@ -1,0 +1,151 @@
+package main
+
+import (
+	"flag"
+	"fmt"
+	"log"
+	"math/rand"
+	"net"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/alicebob/miniredis/v2"
+	"github.com/flashbots/mev-boost-relay/beaconclient"
+	"github.com/flashbots/mev-boost-relay/common"
+	"github.com/flashbots/mev-boost-relay/database"
+	"github.com/flashbots/mev-boost-relay/datastore"
+	"github.com/flashbots/mev-boost-relay/services/api"
+	"github.com/flashbots/mev-boost-relay/services/housekeeper"
+	"github.com/sirupsen/logrus"
+)
+
+// flags
+var (
+	logLevel         string
+	logJSON          bool
+	apiListenAddr    string
+	beaconClientAddr string
+)
+
+func main() {
+	flag.StringVar(&logLevel, "log-level", "info", "log level")
+	flag.BoolVar(&logJSON, "log-json", false, "log as json")
+	flag.StringVar(&apiListenAddr, "api-listen-addr", "0.0.0.0:5656", "api listen address")
+	flag.StringVar(&beaconClientAddr, "beacon-client-addr", "http://localhost:8545", "beacon client address")
+	flag.Parse()
+
+	log := common.LogSetup(logJSON, logLevel).WithFields(logrus.Fields{
+		"service": "relay/housekeeper",
+		"version": "dev",
+	})
+
+	// connect to the beacon client
+	bClient := beaconclient.NewMultiBeaconClient(log, []beaconclient.IBeaconInstance{
+		beaconclient.NewProdBeaconInstance(log, beaconClientAddr),
+	})
+
+	// start redis in-memory
+	redis, err := startInMemoryRedisDatastore()
+	if err != nil {
+		log.WithError(err).Fatal("Failed to start in-memory redis")
+	}
+
+	// create the mockDB
+	pqDB := &database.MockDB{}
+
+	// start housekeeping service
+	housekeeperOpts := &housekeeper.HousekeeperOpts{
+		Log:          log,
+		Redis:        redis,
+		DB:           pqDB,
+		BeaconClient: bClient,
+	}
+
+	service := housekeeper.NewHousekeeper(housekeeperOpts)
+	log.Info("Starting housekeeper service...")
+	go func() {
+		if err := service.Start(); err != nil {
+			log.WithError(err).Error("Housekeeper service failed")
+		}
+	}()
+
+	// start a mock block validation service that always
+	// returns the blocks as valids.
+	apiBlockSimURL, err := startMockBlockValidationServiceServer()
+	if err != nil {
+		log.WithError(err).Fatal("Failed to start mock block validation service")
+	}
+
+	// datastore
+	ds, err := datastore.NewDatastore(redis, nil, pqDB)
+	if err != nil {
+		log.WithError(err).Fatalf("Failed setting up prod datastore")
+	}
+
+	apiOpts := api.RelayAPIOpts{
+		Log:          log,
+		ListenAddr:   apiListenAddr,
+		BeaconClient: bClient,
+		Datastore:    ds,
+		Redis:        redis,
+		DB:           pqDB,
+		// EthNetDetails: *networkInfo, // TODO
+		BlockSimURL: apiBlockSimURL,
+	}
+	apiSrv, err := api.NewRelayAPI(apiOpts)
+	if err != nil {
+		log.WithError(err).Fatal("failed to create service")
+	}
+
+	go func() {
+		if err := apiSrv.StartServer(); err != nil {
+			log.WithError(err).Error("service failed")
+		}
+	}()
+
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	<-sigs
+
+	log.Info("Shutting down...")
+}
+
+func startInMemoryRedisDatastore() (*datastore.RedisCache, error) {
+	redisTestServer, err := miniredis.Run()
+	if err != nil {
+		return nil, fmt.Errorf("failed to start miniredis: %w", err)
+	}
+	redisService, err := datastore.NewRedisCache("", redisTestServer.Addr(), "")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create redis cache: %w", err)
+	}
+	return redisService, nil
+}
+
+func startMockBlockValidationServiceServer() (string, error) {
+	// Generate a random port number between 10000 and 65535 (how likely is this?)
+	rand.Seed(time.Now().UnixNano())
+	port := rand.Intn(55536) + 10000
+
+	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+	if err != nil {
+		return "", err
+	}
+
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintf(w, `{"message": "This is a dummy response", "status": "ok"}`) // TODO: Return a valid JSON-RPC response here
+	})
+
+	go func() {
+		if err := http.Serve(listener, nil); err != nil {
+			log.Fatalf("HTTP server error: %v", err)
+		}
+	}()
+
+	return listener.Addr().String(), nil
+}

@@ -1,13 +1,18 @@
-module github.com/flashbots/suave-playground
+module github.com/flashbots/suave-playground/mev-boost-relay
 
 go 1.21.3
 
-require github.com/flashbots/mev-boost-relay v0.29.0
+require (
+	github.com/alicebob/miniredis/v2 v2.31.0
+	github.com/flashbots/mev-boost-relay v0.29.0
+	github.com/sirupsen/logrus v1.9.3
+)
 
 require (
 	github.com/DataDog/zstd v1.5.2 // indirect
 	github.com/StackExchange/wmi v1.2.1 // indirect
 	github.com/VictoriaMetrics/fastcache v1.12.1 // indirect
+	github.com/alicebob/gopher-json v0.0.0-20200520072559-a9ecdc9d1d3a // indirect
 	github.com/attestantio/go-builder-client v0.4.3-0.20240124194555-d44db06f45fa // indirect
 	github.com/attestantio/go-eth2-client v0.19.9 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
@@ -70,12 +75,12 @@ require (
 	github.com/rogpeppe/go-internal v1.11.0 // indirect
 	github.com/rubenv/sql-migrate v1.5.2 // indirect
 	github.com/shirou/gopsutil v3.21.4-0.20210419000835-c7a38de76ee5+incompatible // indirect
-	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/stretchr/testify v1.8.4 // indirect
 	github.com/supranational/blst v0.3.11 // indirect
 	github.com/syndtr/goleveldb v1.0.1-0.20210819022825-2ae1ddf74ef7 // indirect
 	github.com/tklauser/go-sysconf v0.3.12 // indirect
 	github.com/tklauser/numcpus v0.6.1 // indirect
+	github.com/yuin/gopher-lua v1.1.0 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
 	golang.org/x/crypto v0.18.0 // indirect
 	golang.org/x/exp v0.0.0-20231110203233-9a3e6036ecaa // indirect
