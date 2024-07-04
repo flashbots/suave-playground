@@ -110,21 +110,34 @@ sed -i '' 's/"cancunTime".*$/"cancunTime": '"$CANCUN_TIME"',/g' "$genesis_file"
 
 lcli pretty-ssz --spec $SPEC_PRESET --testnet-dir $TESTNET_DIR BeaconState $TESTNET_DIR/genesis.ssz | jq ".genesis_validators_root" --raw-output > $DATADIR/genesis_validators_root.txt
 
-# Initialize and start GETH
-geth init \
-    --datadir $DATADIR/geth_datadir \
-    $genesis_file
+# Create a predefined JWT token
+echo "04592280e1778419b7aa954d43871cb2cfb2ebda754fb735e8adeb293a88f9bf" > $DATADIR/jwtsecret
 
-execute_command_add_PID "geth.log" "geth" \
-    --datadir "$DATADIR/geth_datadir" \
+# Initialize and start GETH
+#geth init \
+#    --datadir $DATADIR/geth_datadir \
+#    $genesis_file
+
+#execute_command_add_PID "geth.log" "geth" \
+#    --datadir "$DATADIR/geth_datadir" \
+#    --ipcdisable \
+#    --http \
+#    --http.api="engine,eth,web3,net,debug" \
+#    --networkid="$CHAIN_ID" \
+#    --syncmode=full \
+#    --port 7000 \
+#    --http.port 6000 \
+#    --authrpc.port 5000
+
+execute_command_add_PID "reth.log" "reth" \
+	node \
+	--chain $genesis_file \
+	--datadir "$DATADIR/reth_datadir" \
     --ipcdisable \
-    --http \
-    --http.api="engine,eth,web3,net,debug" \
-    --networkid="$CHAIN_ID" \
-    --syncmode=full \
-    --port 7000 \
-    --http.port 6000 \
-    --authrpc.port 5000
+	--http \
+	--http.port 6000 \
+	--authrpc.port 5000 \
+	--authrpc.jwtsecret $DATADIR/jwtsecret
 
 # Start BEACON NODE
 execute_command_add_PID "beacon_node.log" "lighthouse" \
@@ -146,7 +159,7 @@ execute_command_add_PID "beacon_node.log" "lighthouse" \
 	--disable-packet-filter \
 	--target-peers 0 \
     --execution-endpoint http://localhost:5000 \
-    --execution-jwt $DATADIR/geth_datadir/geth/jwtsecret # TODO: Add a generic one
+    --execution-jwt $DATADIR/jwtsecret
 
 # Start VALIDATOR
 execute_command_add_PID "validator.log" "lighthouse" \
