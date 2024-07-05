@@ -37,7 +37,6 @@ var (
 	apiListenPort    uint64
 	apiSecretKey     string
 	beaconClientAddr string
-	forceStartup     bool
 )
 
 func main() {
@@ -47,7 +46,6 @@ func main() {
 	flag.Uint64Var(&apiListenPort, "api-listen-port", 5555, "api listen port")
 	flag.StringVar(&apiSecretKey, "api-secret", defaultSecretKey, "api secret")
 	flag.StringVar(&beaconClientAddr, "beacon-client-addr", "http://localhost:8000", "beacon client address")
-	flag.BoolVar(&forceStartup, "force", false, "force validator registration at startup")
 	flag.Parse()
 
 	log := common.LogSetup(logJSON, logLevel)
