@@ -100,7 +100,7 @@ func main() {
 
 	// Refresh the initial set of validators from the beacon node. This adds the validators
 	// as known validators in the chain. (not registered yet).
-	ds.RefreshKnownValidatorsBySlot(log, bClient, 0)
+	ds.RefreshKnownValidatorsWithoutChecks(log, bClient, 0)
 
 	// start housekeeping service
 	housekeeperOpts := &housekeeper.HousekeeperOpts{
@@ -169,8 +169,8 @@ func main() {
 
 		log.Info("Forcing validator registration at startup")
 
-		housekeeperSrv.UpdateProposerDutiesBySlot(0)
-		apiSrv.UpdateProposerDutiesBySlot(0)
+		housekeeperSrv.UpdateProposerDutiesWithoutChecks(0)
+		apiSrv.UpdateProposerDutiesWithoutChecks(0)
 	}()
 
 	sigs := make(chan os.Signal, 1)

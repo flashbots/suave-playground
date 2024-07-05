@@ -6,8 +6,7 @@ require (
 	github.com/alicebob/miniredis/v2 v2.32.1
 	github.com/attestantio/go-eth2-client v0.21.1
 	github.com/flashbots/go-boost-utils v1.8.0
-	github.com/flashbots/mev-boost-relay v0.29.2-0.20240705090019-040d0a807a8a
-	github.com/sirupsen/logrus v1.9.3
+	github.com/flashbots/mev-boost-relay v0.29.2-0.20240705093628-4d4478a9c9dc
 )
 
 require (
@@ -79,6 +78,7 @@ require (
 	github.com/rogpeppe/go-internal v1.11.0 // indirect
 	github.com/rubenv/sql-migrate v1.5.2 // indirect
 	github.com/shirou/gopsutil v3.21.4-0.20210419000835-c7a38de76ee5+incompatible // indirect
+	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/stretchr/testify v1.9.0 // indirect
 	github.com/supranational/blst v0.3.11 // indirect
 	github.com/syndtr/goleveldb v1.0.1-0.20210819022825-2ae1ddf74ef7 // indirect

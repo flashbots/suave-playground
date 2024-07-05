@@ -109,8 +109,8 @@ github.com/flashbots/go-boost-utils v1.8.0 h1:z3K1hw+Fbl9AGMNQKnK7Bvf0M/rKgjfruA
 github.com/flashbots/go-boost-utils v1.8.0/go.mod h1:Ry1Rw8Lx5v1rpAR0+IvR4sV10jYAeQaGVM3vRD8mYdM=
 github.com/flashbots/go-utils v0.5.0 h1:ldjWta9B9//DJU2QcwRbErez3+1aKhSn6EoFc6d5kPY=
 github.com/flashbots/go-utils v0.5.0/go.mod h1:LauDwifaRdSK0mS5X34GR59pJtUu1T/lOFNdff1BqtI=
-github.com/flashbots/mev-boost-relay v0.29.2-0.20240705090019-040d0a807a8a h1:xtd9CegZQmFcSLh0h6iwUkJrq969D+BF2+C/5FyGjUY=
-github.com/flashbots/mev-boost-relay v0.29.2-0.20240705090019-040d0a807a8a/go.mod h1:7lLxeRB+VYujHNkC5+UluImuPN3/pEaq4njn8kI6QZ8=
+github.com/flashbots/mev-boost-relay v0.29.2-0.20240705093628-4d4478a9c9dc h1:xHlCUwYYTz37vHY9hRthhNh+5zgYjdguBGJo0CBQZpY=
+github.com/flashbots/mev-boost-relay v0.29.2-0.20240705093628-4d4478a9c9dc/go.mod h1:7lLxeRB+VYujHNkC5+UluImuPN3/pEaq4njn8kI6QZ8=
 github.com/fsnotify/fsnotify v1.4.7/go.mod h1:jwhsz4b93w/PPRr/qN1Yymfu8t87LnFCMoQvtojpjFo=
 github.com/fsnotify/fsnotify v1.4.9/go.mod h1:znqG4EE+3YCdAaPaxE2ZRY/06pZUdp0tY4IgpuI1SZQ=
 github.com/fsnotify/fsnotify v1.6.0 h1:n+5WquG0fcWoWp6xPWfHdbskMCQaFnG6PfBrh1Ky4HY=
