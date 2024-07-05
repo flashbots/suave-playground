@@ -112,6 +112,7 @@ lcli pretty-ssz --spec $SPEC_PRESET --testnet-dir $TESTNET_DIR BeaconState $TEST
 
 # Create a predefined JWT token
 echo "04592280e1778419b7aa954d43871cb2cfb2ebda754fb735e8adeb293a88f9bf" > $DATADIR/jwtsecret
+echo "0" > $DATADIR/testnet/deposit_contract_block.txt
 
 # Initialize and start GETH
 #geth init \
@@ -133,14 +134,13 @@ execute_command_add_PID "reth.log" "reth" \
 	node \
 	--chain $genesis_file \
 	--datadir "$DATADIR/reth_datadir" \
-    --ipcdisable \
 	--http \
 	--http.port 6000 \
 	--authrpc.port 5000 \
 	--authrpc.jwtsecret $DATADIR/jwtsecret
 
 # Start BEACON NODE
-execute_command_add_PID "beacon_node.log" "lighthouse" \
+execute_command_add_PID "beacon_node.log" "./lighthouse2" \
 	--debug-level $DEBUG_LEVEL \
 	bn \
 	--datadir "$DATADIR/node_1" \
@@ -160,10 +160,14 @@ execute_command_add_PID "beacon_node.log" "lighthouse" \
 	--target-peers 0 \
     --execution-endpoint http://localhost:5000 \
     --execution-jwt $DATADIR/jwtsecret \
-	--builder http://localhost:5555
+	--builder http://localhost:5555  \
+	--builder-fallback-epochs-since-finalization 0 \
+	--builder-fallback-disable-checks \
+	--always-prepare-payload \
+	--prepare-payload-lookahead "8000"
 
 # Start VALIDATOR
-execute_command_add_PID "validator.log" "lighthouse" \
+execute_command_add_PID "validator.log" "./lighthouse2" \
 	--debug-level $DEBUG_LEVEL \
 	vc \
 	--datadir "$DATADIR/node_1" \
@@ -176,4 +180,5 @@ execute_command_add_PID "validator.log" "lighthouse" \
 # Start mev-relay
 execute_command_add_PID "mev_boost_relay.log" "./mev-boost-relay/mev-boost-relay" \
 	--beacon-client-addr http://localhost:8000 \
+	--log-level debug \
 	--api-listen-port 5555

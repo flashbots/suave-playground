@@ -11,11 +11,14 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/flashbots/go-boost-utils/bls"
+	boostSsz "github.com/flashbots/go-boost-utils/ssz"
 	"github.com/flashbots/mev-boost-relay/beaconclient"
 	"github.com/flashbots/mev-boost-relay/common"
 	"github.com/flashbots/mev-boost-relay/database"
@@ -35,15 +38,17 @@ var (
 	apiListenPort    uint64
 	apiSecretKey     string
 	beaconClientAddr string
+	forceStartup     bool
 )
 
 func main() {
 	flag.StringVar(&logLevel, "log-level", "info", "log level")
 	flag.BoolVar(&logJSON, "log-json", false, "log as json")
 	flag.StringVar(&apiListenAddr, "api-listen-addr", "0.0.0.0", "api listen address")
-	flag.Uint64Var(&apiListenPort, "api-listen-port", 8000, "api listen port")
+	flag.Uint64Var(&apiListenPort, "api-listen-port", 5555, "api listen port")
 	flag.StringVar(&apiSecretKey, "api-secret", defaultSecretKey, "api secret")
 	flag.StringVar(&beaconClientAddr, "beacon-client-addr", "http://localhost:8000", "beacon client address")
+	flag.BoolVar(&forceStartup, "force", false, "force validator registration at startup")
 	flag.Parse()
 
 	log := common.LogSetup(logJSON, logLevel).WithFields(logrus.Fields{
@@ -56,6 +61,32 @@ func main() {
 		beaconclient.NewProdBeaconInstance(log, beaconClientAddr),
 	})
 
+	// wait until the beacon client is ready, otherwise, the api and housekeeper services
+	// will fail at startup
+	syncTimeoutCh := time.After(5 * time.Second)
+	for {
+		if _, err := bClient.BestSyncStatus(); err == nil {
+			break
+		}
+		select {
+		case <-syncTimeoutCh:
+			log.Fatal("Beacon client failed to sync")
+		default:
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+	log.Info("Beacon client synced")
+
+	// compute the builder domain with the DOMAIN_APPLICATION_BUILDER + genesis fork version
+	info, err := bClient.GetGenesis()
+	if err != nil {
+		log.WithError(err).Fatal("Failed to get genesis")
+	}
+	builderDomain, err := common.ComputeDomain(boostSsz.DomainTypeAppBuilder, info.Data.GenesisForkVersion, phase0.Root{}.String())
+	if err != nil {
+		log.WithError(err).Fatal("Failed to compute builder domain")
+	}
+
 	// start redis in-memory
 	redis, err := startInMemoryRedisDatastore()
 	if err != nil {
@@ -63,7 +94,37 @@ func main() {
 	}
 
 	// create the mockDB
-	pqDB := &database.MockDB{}
+	pqDB := newInmemoryDB()
+
+	// datastore
+	ds, err := datastore.NewDatastore(redis, nil, pqDB)
+	if err != nil {
+		log.WithError(err).Fatalf("Failed setting up prod datastore")
+	}
+
+	// Refresh the initial set of validators from the beacon node. This adds the validators
+	// as known validators in the chain. (not registered yet).
+	ds.RefreshKnownValidators(log, bClient, 10000000000)
+
+	if forceStartup {
+		// take all the known validators and register them as valid validators already
+		// this is due some internal timelines inside housekeepr and api
+		for i := 0; i < ds.NumKnownValidators(); i++ {
+			pubKey, ok := ds.GetKnownValidatorPubkeyByIndex(uint64(i))
+			if !ok {
+				log.WithError(err).Fatalf("Failed to get known validator pubkey by index %d", i)
+			}
+			entry := database.ValidatorRegistrationEntry{
+				ID:           int64(i),
+				Pubkey:       pubKey.String(),
+				FeeRecipient: "0x0000000000000000000000000000000000000000",
+				Signature:    "0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+			}
+			if err := pqDB.SaveValidatorRegistration(entry); err != nil {
+				log.WithError(err).Fatalf("Failed to save validator registration for pubkey %s", pubKey.String())
+			}
+		}
+	}
 
 	// start housekeeping service
 	housekeeperOpts := &housekeeper.HousekeeperOpts{
@@ -88,12 +149,6 @@ func main() {
 		log.WithError(err).Fatal("Failed to start mock block validation service")
 	}
 
-	// datastore
-	ds, err := datastore.NewDatastore(redis, nil, pqDB)
-	if err != nil {
-		log.WithError(err).Fatalf("Failed setting up prod datastore")
-	}
-
 	// decode the secret key
 	envSkBytes, err := hex.DecodeString(strings.TrimPrefix(apiSecretKey, "0x"))
 	if err != nil {
@@ -112,7 +167,10 @@ func main() {
 		Redis:        redis,
 		DB:           pqDB,
 		SecretKey:    secretKey,
-		// EthNetDetails: *networkInfo, // TODO
+		EthNetDetails: common.EthNetworkDetails{
+			Name:          "custom",
+			DomainBuilder: builderDomain, // this is the only one required to validate the validator registration
+		},
 		BlockSimURL:     apiBlockSimURL,
 		ProposerAPI:     true,
 		BlockBuilderAPI: true,
@@ -147,6 +205,12 @@ func startInMemoryRedisDatastore() (*datastore.RedisCache, error) {
 	return redisService, nil
 }
 
+var emptyResponse = `{
+	"jsonrpc": "2.0",
+	"id": 1,
+	"result": null
+}`
+
 func startMockBlockValidationServiceServer() (string, error) {
 	// Generate a random port number between 10000 and 65535 (how likely is this?)
 	rand.Seed(time.Now().UnixNano())
@@ -160,7 +224,7 @@ func startMockBlockValidationServiceServer() (string, error) {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, `{"message": "This is a dummy response", "status": "ok"}`) // TODO: Return a valid JSON-RPC response here
+		fmt.Fprint(w, emptyResponse)
 	})
 
 	go func() {
@@ -170,4 +234,67 @@ func startMockBlockValidationServiceServer() (string, error) {
 	}()
 
 	return listener.Addr().String(), nil
+}
+
+// inmemoryDB is an extension of the MockDB that stores the validator registry entries in memory.
+type inmemoryDB struct {
+	*database.MockDB
+
+	validatorRegistryEntriesLock sync.Mutex
+	validatorRegistryEntries     map[string]*database.ValidatorRegistrationEntry
+}
+
+func newInmemoryDB() *inmemoryDB {
+	return &inmemoryDB{
+		MockDB:                   &database.MockDB{},
+		validatorRegistryEntries: make(map[string]*database.ValidatorRegistrationEntry),
+	}
+}
+
+func (i *inmemoryDB) NumRegisteredValidators() (count uint64, err error) {
+	return uint64(len(i.validatorRegistryEntries)), nil
+}
+
+func (i *inmemoryDB) SaveValidatorRegistration(entry database.ValidatorRegistrationEntry) error {
+	i.validatorRegistryEntriesLock.Lock()
+	defer i.validatorRegistryEntriesLock.Unlock()
+
+	i.validatorRegistryEntries[entry.Pubkey] = &entry
+	return nil
+}
+
+func (i *inmemoryDB) GetLatestValidatorRegistrations(timestampOnly bool) ([]*database.ValidatorRegistrationEntry, error) {
+	i.validatorRegistryEntriesLock.Lock()
+	defer i.validatorRegistryEntriesLock.Unlock()
+
+	entries := make([]*database.ValidatorRegistrationEntry, 0, len(i.validatorRegistryEntries))
+	for _, entry := range i.validatorRegistryEntries {
+		entries = append(entries, entry)
+	}
+	return entries, nil
+}
+
+func (i *inmemoryDB) GetValidatorRegistration(pubkey string) (*database.ValidatorRegistrationEntry, error) {
+	i.validatorRegistryEntriesLock.Lock()
+	defer i.validatorRegistryEntriesLock.Unlock()
+
+	entry, found := i.validatorRegistryEntries[pubkey]
+	if !found {
+		return nil, fmt.Errorf("validator registration not found")
+	}
+	return entry, nil
+}
+
+func (i *inmemoryDB) GetValidatorRegistrationsForPubkeys(pubkeys []string) ([]*database.ValidatorRegistrationEntry, error) {
+	i.validatorRegistryEntriesLock.Lock()
+	defer i.validatorRegistryEntriesLock.Unlock()
+
+	entries := make([]*database.ValidatorRegistrationEntry, 0, len(pubkeys))
+	for _, pubkey := range pubkeys {
+		entry, found := i.validatorRegistryEntries[pubkey]
+		if found {
+			entries = append(entries, entry)
+		}
+	}
+	return entries, nil
 }

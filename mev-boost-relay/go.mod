@@ -4,6 +4,8 @@ go 1.21.3
 
 require (
 	github.com/alicebob/miniredis/v2 v2.31.0
+	github.com/attestantio/go-builder-client v0.4.3-0.20240124194555-d44db06f45fa
+	github.com/flashbots/go-boost-utils v1.8.0
 	github.com/flashbots/mev-boost-relay v0.29.0
 	github.com/sirupsen/logrus v1.9.3
 )
@@ -14,7 +16,6 @@ require (
 	github.com/StackExchange/wmi v1.2.1 // indirect
 	github.com/VictoriaMetrics/fastcache v1.12.1 // indirect
 	github.com/alicebob/gopher-json v0.0.0-20200520072559-a9ecdc9d1d3a // indirect
-	github.com/attestantio/go-builder-client v0.4.3-0.20240124194555-d44db06f45fa // indirect
 	github.com/attestantio/go-eth2-client v0.19.9 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bits-and-blooms/bitset v1.10.0 // indirect
@@ -38,7 +39,6 @@ require (
 	github.com/ethereum/go-ethereum v1.13.10 // indirect
 	github.com/fatih/color v1.16.0 // indirect
 	github.com/ferranbt/fastssz v0.1.3 // indirect
-	github.com/flashbots/go-boost-utils v1.8.0 // indirect
 	github.com/flashbots/go-utils v0.5.0 // indirect
 	github.com/gballet/go-verkle v0.1.1-0.20231031103413-a67434b50f46 // indirect
 	github.com/getsentry/sentry-go v0.18.0 // indirect
