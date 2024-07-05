@@ -25,7 +25,6 @@ import (
 	"github.com/flashbots/mev-boost-relay/datastore"
 	"github.com/flashbots/mev-boost-relay/services/api"
 	"github.com/flashbots/mev-boost-relay/services/housekeeper"
-	"github.com/sirupsen/logrus"
 )
 
 var defaultSecretKey = "5eae315483f028b5cdd5d1090ff0c7618b18737ea9bf3c35047189db22835c48"
@@ -51,14 +50,11 @@ func main() {
 	flag.BoolVar(&forceStartup, "force", false, "force validator registration at startup")
 	flag.Parse()
 
-	log := common.LogSetup(logJSON, logLevel).WithFields(logrus.Fields{
-		"service": "relay/housekeeper",
-		"version": "dev",
-	})
+	log := common.LogSetup(logJSON, logLevel)
 
 	// connect to the beacon client
 	bClient := beaconclient.NewMultiBeaconClient(log, []beaconclient.IBeaconInstance{
-		beaconclient.NewProdBeaconInstance(log, beaconClientAddr),
+		beaconclient.NewProdBeaconInstance(log, beaconClientAddr, beaconClientAddr),
 	})
 
 	// wait until the beacon client is ready, otherwise, the api and housekeeper services
@@ -104,40 +100,20 @@ func main() {
 
 	// Refresh the initial set of validators from the beacon node. This adds the validators
 	// as known validators in the chain. (not registered yet).
-	ds.RefreshKnownValidators(log, bClient, 10000000000)
-
-	if forceStartup {
-		// take all the known validators and register them as valid validators already
-		// this is due some internal timelines inside housekeepr and api
-		for i := 0; i < ds.NumKnownValidators(); i++ {
-			pubKey, ok := ds.GetKnownValidatorPubkeyByIndex(uint64(i))
-			if !ok {
-				log.WithError(err).Fatalf("Failed to get known validator pubkey by index %d", i)
-			}
-			entry := database.ValidatorRegistrationEntry{
-				ID:           int64(i),
-				Pubkey:       pubKey.String(),
-				FeeRecipient: "0x0000000000000000000000000000000000000000",
-				Signature:    "0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
-			}
-			if err := pqDB.SaveValidatorRegistration(entry); err != nil {
-				log.WithError(err).Fatalf("Failed to save validator registration for pubkey %s", pubKey.String())
-			}
-		}
-	}
+	ds.RefreshKnownValidatorsBySlot(log, bClient, 0)
 
 	// start housekeeping service
 	housekeeperOpts := &housekeeper.HousekeeperOpts{
-		Log:          log,
+		Log:          log.WithField("service", "housekeeper"),
 		Redis:        redis,
 		DB:           pqDB,
 		BeaconClient: bClient,
 	}
 
-	service := housekeeper.NewHousekeeper(housekeeperOpts)
+	housekeeperSrv := housekeeper.NewHousekeeper(housekeeperOpts)
 	log.Info("Starting housekeeper service...")
 	go func() {
-		if err := service.Start(); err != nil {
+		if err := housekeeperSrv.Start(); err != nil {
 			log.WithError(err).Error("Housekeeper service failed")
 		}
 	}()
@@ -160,7 +136,7 @@ func main() {
 	}
 
 	apiOpts := api.RelayAPIOpts{
-		Log:          log,
+		Log:          log.WithField("service", "api"),
 		ListenAddr:   fmt.Sprintf("%s:%d", apiListenAddr, apiListenPort),
 		BeaconClient: bClient,
 		Datastore:    ds,
@@ -184,6 +160,17 @@ func main() {
 		if err := apiSrv.StartServer(); err != nil {
 			log.WithError(err).Error("service failed")
 		}
+	}()
+
+	go func() {
+		// We only require to do this at startup once, because otherwise we will
+		// just keep with the normal workflow of the mev-boost-relay.
+		<-apiSrv.ValidatorUpdateCh()
+
+		log.Info("Forcing validator registration at startup")
+
+		housekeeperSrv.UpdateProposerDutiesBySlot(0)
+		apiSrv.UpdateProposerDutiesBySlot(0)
 	}()
 
 	sigs := make(chan os.Signal, 1)

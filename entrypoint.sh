@@ -140,7 +140,7 @@ execute_command_add_PID "reth.log" "reth" \
 	--authrpc.jwtsecret $DATADIR/jwtsecret
 
 # Start BEACON NODE
-execute_command_add_PID "beacon_node.log" "./lighthouse2" \
+execute_command_add_PID "beacon_node.log" "lighthouse" \
 	--debug-level $DEBUG_LEVEL \
 	bn \
 	--datadir "$DATADIR/node_1" \
@@ -167,7 +167,7 @@ execute_command_add_PID "beacon_node.log" "./lighthouse2" \
 	--prepare-payload-lookahead "8000"
 
 # Start VALIDATOR
-execute_command_add_PID "validator.log" "./lighthouse2" \
+execute_command_add_PID "validator.log" "lighthouse" \
 	--debug-level $DEBUG_LEVEL \
 	vc \
 	--datadir "$DATADIR/node_1" \
