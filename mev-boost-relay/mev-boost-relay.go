@@ -1,18 +1,16 @@
-package main
+package mevboostrelay
 
 import (
 	"encoding/hex"
-	"flag"
 	"fmt"
+	"io"
 	"log"
 	"math/rand"
 	"net"
 	"net/http"
 	"os"
-	"os/signal"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
@@ -29,30 +27,36 @@ import (
 
 var defaultSecretKey = "5eae315483f028b5cdd5d1090ff0c7618b18737ea9bf3c35047189db22835c48"
 
-// flags
-var (
-	logLevel         string
-	logJSON          bool
-	apiListenAddr    string
-	apiListenPort    uint64
-	apiSecretKey     string
-	beaconClientAddr string
-)
+type Config struct {
+	ApiListenAddr    string
+	ApiListenPort    uint64
+	ApiSecretKey     string
+	BeaconClientAddr string
+	LogOutput        io.Writer
+}
 
-func main() {
-	flag.StringVar(&logLevel, "log-level", "info", "log level")
-	flag.BoolVar(&logJSON, "log-json", false, "log as json")
-	flag.StringVar(&apiListenAddr, "api-listen-addr", "0.0.0.0", "api listen address")
-	flag.Uint64Var(&apiListenPort, "api-listen-port", 5555, "api listen port")
-	flag.StringVar(&apiSecretKey, "api-secret", defaultSecretKey, "api secret")
-	flag.StringVar(&beaconClientAddr, "beacon-client-addr", "http://localhost:8000", "beacon client address")
-	flag.Parse()
+func DefaultConfig() *Config {
+	return &Config{
+		ApiListenAddr:    "127.0.0.1",
+		ApiListenPort:    5555,
+		ApiSecretKey:     defaultSecretKey,
+		BeaconClientAddr: "http://localhost:8000",
+		LogOutput:        os.Stdout,
+	}
+}
 
-	log := common.LogSetup(logJSON, logLevel)
+type MevBoostRelay struct {
+	apiSrv         *api.RelayAPI
+	housekeeperSrv *housekeeper.Housekeeper
+}
+
+func New(config *Config) (*MevBoostRelay, error) {
+	log := common.LogSetup(false, "info")
+	log.Logger.SetOutput(config.LogOutput)
 
 	// connect to the beacon client
 	bClient := beaconclient.NewMultiBeaconClient(log, []beaconclient.IBeaconInstance{
-		beaconclient.NewProdBeaconInstance(log, beaconClientAddr, beaconClientAddr),
+		beaconclient.NewProdBeaconInstance(log, config.BeaconClientAddr, config.BeaconClientAddr),
 	})
 
 	// wait until the beacon client is ready, otherwise, the api and housekeeper services
@@ -64,7 +68,7 @@ func main() {
 		}
 		select {
 		case <-syncTimeoutCh:
-			log.Fatal("Beacon client failed to sync")
+			return nil, fmt.Errorf("beacon client failed to start")
 		default:
 			time.Sleep(100 * time.Millisecond)
 		}
@@ -74,17 +78,17 @@ func main() {
 	// compute the builder domain with the DOMAIN_APPLICATION_BUILDER + genesis fork version
 	info, err := bClient.GetGenesis()
 	if err != nil {
-		log.WithError(err).Fatal("Failed to get genesis")
+		return nil, fmt.Errorf("failed to get genesis: %w", err)
 	}
 	builderDomain, err := common.ComputeDomain(boostSsz.DomainTypeAppBuilder, info.Data.GenesisForkVersion, phase0.Root{}.String())
 	if err != nil {
-		log.WithError(err).Fatal("Failed to compute builder domain")
+		return nil, fmt.Errorf("failed to compute builder domain: %w", err)
 	}
 
 	// start redis in-memory
 	redis, err := startInMemoryRedisDatastore()
 	if err != nil {
-		log.WithError(err).Fatal("Failed to start in-memory redis")
+		return nil, fmt.Errorf("failed to start in-memory redis: %w", err)
 	}
 
 	// create the mockDB
@@ -120,22 +124,22 @@ func main() {
 	// returns the blocks as valids.
 	apiBlockSimURL, err := startMockBlockValidationServiceServer()
 	if err != nil {
-		log.WithError(err).Fatal("Failed to start mock block validation service")
+		return nil, fmt.Errorf("failed to start mock block validation service: %w", err)
 	}
 
 	// decode the secret key
-	envSkBytes, err := hex.DecodeString(strings.TrimPrefix(apiSecretKey, "0x"))
+	envSkBytes, err := hex.DecodeString(strings.TrimPrefix(config.ApiSecretKey, "0x"))
 	if err != nil {
-		log.WithError(err).Fatal("incorrect secret key provided")
+		return nil, fmt.Errorf("incorrect secret key provided")
 	}
 	secretKey, err := bls.SecretKeyFromBytes(envSkBytes[:])
 	if err != nil {
-		log.WithError(err).Fatal("incorrect builder API secret key provided")
+		return nil, fmt.Errorf("incorrect builder API secret key provided")
 	}
 
 	apiOpts := api.RelayAPIOpts{
 		Log:          log.WithField("service", "api"),
-		ListenAddr:   fmt.Sprintf("%s:%d", apiListenAddr, apiListenPort),
+		ListenAddr:   fmt.Sprintf("%s:%d", config.ApiListenAddr, config.ApiListenPort),
 		BeaconClient: bClient,
 		Datastore:    ds,
 		Redis:        redis,
@@ -151,7 +155,7 @@ func main() {
 	}
 	apiSrv, err := api.NewRelayAPI(apiOpts)
 	if err != nil {
-		log.WithError(err).Fatal("failed to create service")
+		return nil, fmt.Errorf("failed to create service")
 	}
 
 	go func() {
@@ -171,11 +175,10 @@ func main() {
 		apiSrv.UpdateProposerDutiesWithoutChecks(0)
 	}()
 
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
-	<-sigs
-
-	log.Info("Shutting down...")
+	return &MevBoostRelay{
+		apiSrv:         apiSrv,
+		housekeeperSrv: housekeeperSrv,
+	}, nil
 }
 
 func startInMemoryRedisDatastore() (*datastore.RedisCache, error) {

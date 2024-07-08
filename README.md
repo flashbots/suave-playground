@@ -1,13 +1,21 @@
-# Suave-playground experiment
+# Suave playground
 
-Single docker-container for a full end-to-end Ethereum devnet.
-
-You need to install `lcli`, `lighthouse` and `geth`.
-
-`lcli` needs to be built from [this](https://github.com/sigp/lighthouse/pull/5137) PR.
-
-Run the network with:
+Make sure you have both `reth` and `lighthouse` installed:
 
 ```
-./entrypoint.sh
+$ which reth
+$ which lighthouse
 ```
+
+Run the playground:
+
+```
+$ go run main.go
+```
+
+The playground runs four services:
+
+- A `lighthouse` beacon node service.
+- A `lighthouse` validator service.
+- A `reth` execution client service.
+- An in-memory `mev-boost-relay` service.
