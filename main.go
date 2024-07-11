@@ -42,16 +42,7 @@ var rootCmd = &cobra.Command{
 	},
 }
 
-var fetchClientsCmd = &cobra.Command{
-	Use:   "fetch-clients",
-	Short: "",
-	Long:  ``,
-	Run: func(cmd *cobra.Command, args []string) {
-	},
-}
-
 func main() {
-	rootCmd.AddCommand(fetchClientsCmd)
 	rootCmd.Execute()
 }
 
