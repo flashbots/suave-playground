@@ -5,7 +5,6 @@ import (
 	_ "embed"
 	"encoding/hex"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"html/template"
 	"os"
@@ -21,27 +20,49 @@ import (
 	mevboostrelay "github.com/ferranbt/suave-playground/mev-boost-relay"
 	"github.com/hashicorp/go-uuid"
 	"github.com/prysmaticlabs/prysm/v5/config/params"
-	"github.com/prysmaticlabs/prysm/v5/crypto/bls"
 	"github.com/prysmaticlabs/prysm/v5/crypto/bls/common"
 	"github.com/prysmaticlabs/prysm/v5/runtime/interop"
 	"github.com/prysmaticlabs/prysm/v5/runtime/version"
+	"github.com/spf13/cobra"
 	keystorev4 "github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4"
 	"gopkg.in/yaml.v2"
 )
 
-//go:embed priv_keys.txt
-var defaultPrivKeys string
+//go:embed config.yaml
+var clConfigContent []byte
 
 var defaultJWTToken = "04592280e1778419b7aa954d43871cb2cfb2ebda754fb735e8adeb293a88f9bf"
 
-var generateNewKeys bool
+var rootCmd = &cobra.Command{
+	Use:   "crucible",
+	Short: "",
+	Long:  ``,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runIt()
+	},
+}
+
+var fetchClientsCmd = &cobra.Command{
+	Use:   "fetch-clients",
+	Short: "",
+	Long:  ``,
+	Run: func(cmd *cobra.Command, args []string) {
+	},
+}
 
 func main() {
-	flag.BoolVar(&generateNewKeys, "generate-keys", false, "generate new keys for the validator client")
-	flag.Parse()
+	rootCmd.AddCommand(fetchClientsCmd)
+	rootCmd.Execute()
+}
 
-	if err := params.LoadChainConfigFile("./config.yaml", nil); err != nil {
-		panic(err)
+func runIt() error {
+	// load the config.yaml file
+	clConfig, err := params.UnmarshalConfig(clConfigContent, nil)
+	if err != nil {
+		return err
+	}
+	if err := params.SetActive(clConfig); err != nil {
+		return err
 	}
 
 	genesisTime := uint64(time.Now().Unix())
@@ -52,42 +73,17 @@ func main() {
 
 	v, err := version.FromString("capella")
 	if err != nil {
-		panic(err)
+		return err
 	}
 
-	var (
-		priv []common.SecretKey
-		pub  []common.PublicKey
-	)
-
-	if generateNewKeys {
-		priv, pub, err = interop.DeterministicallyGenerateKeys(0, 100)
-		if err != nil {
-			panic(err)
-		}
-	} else {
-		for _, raw := range strings.Split(defaultPrivKeys, "\n") {
-			if raw == "" {
-				continue
-			}
-
-			buf, err := hex.DecodeString(raw)
-			if err != nil {
-				panic(err)
-			}
-
-			sec, err := bls.SecretKeyFromBytes(buf)
-			if err != nil {
-				panic(err)
-			}
-			priv = append(priv, sec)
-			pub = append(pub, sec.PublicKey())
-		}
+	priv, pub, err := interop.DeterministicallyGenerateKeys(0, 100)
+	if err != nil {
+		return err
 	}
 
 	depositData, roots, err := interop.DepositDataFromKeysWithExecCreds(priv, pub, 100)
 	if err != nil {
-		panic(err)
+		return err
 	}
 
 	opts := make([]interop.PremineGenesisOpt, 0)
@@ -95,7 +91,7 @@ func main() {
 
 	state, err := interop.NewPreminedGenesis(context.Background(), genesisTime, 0, 100, v, block, opts...)
 	if err != nil {
-		panic(err)
+		return err
 	}
 
 	out := &output{dst: "local-testnet"}
@@ -111,7 +107,7 @@ func main() {
 		"data_validator/":                     &lighthouseKeystore{privKeys: priv},
 	})
 	if err != nil {
-		panic(err)
+		return err
 	}
 
 	svcManager := newServiceManager(out)
@@ -178,7 +174,7 @@ func main() {
 	{
 		cfg := mevboostrelay.DefaultConfig()
 		if cfg.LogOutput, err = out.LogOutput("mev-boost-relay"); err != nil {
-			panic(err)
+			return err
 		}
 		mevboostrelay.New(cfg)
 	}
@@ -195,6 +191,7 @@ func main() {
 	}
 
 	svcManager.StopAndWait()
+	return nil
 }
 
 type output struct {
