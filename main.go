@@ -38,6 +38,9 @@ var clConfigContent []byte
 
 var defaultJWTToken = "04592280e1778419b7aa954d43871cb2cfb2ebda754fb735e8adeb293a88f9bf"
 
+var outputFlag string
+var resetFlag bool
+
 var rootCmd = &cobra.Command{
 	Use:   "crucible",
 	Short: "",
@@ -48,10 +51,49 @@ var rootCmd = &cobra.Command{
 }
 
 func main() {
+	rootCmd.Flags().StringVar(&outputFlag, "output", "local-testnet", "")
+	rootCmd.Flags().BoolVar(&resetFlag, "reset", false, "")
 	rootCmd.Execute()
 }
 
 func runIt() error {
+	out := &output{dst: outputFlag}
+
+	exists := out.Exists("data_reth")
+	if exists && resetFlag || !exists {
+		if resetFlag {
+			if err := out.Remove(""); err != nil {
+				return err
+			}
+		}
+		if err := setupArtifacts(); err != nil {
+			return err
+		}
+	} else {
+		fmt.Println("Artifacts already exist, skipping setup")
+	}
+
+	svcManager, err := setupServices()
+	if err != nil {
+		return err
+	}
+
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, os.Interrupt)
+
+	select {
+	case <-sig:
+		fmt.Println("Stopping...")
+	case <-svcManager.NotifyErrCh():
+	}
+
+	svcManager.StopAndWait()
+	return nil
+}
+
+func setupArtifacts() error {
+	out := &output{dst: outputFlag}
+
 	// load the config.yaml file
 	clConfig, err := params.UnmarshalConfig(clConfigContent, nil)
 	if err != nil {
@@ -111,7 +153,6 @@ func runIt() error {
 		return err
 	}
 
-	out := &output{dst: "local-testnet"}
 	err = out.WriteBatch(map[string]interface{}{
 		"testnet/config.yaml":                 func() ([]byte, error) { return convert(config) },
 		"testnet/genesis.ssz":                 state,
@@ -126,6 +167,12 @@ func runIt() error {
 	if err != nil {
 		return err
 	}
+
+	return nil
+}
+
+func setupServices() (*serviceManager, error) {
+	out := &output{dst: outputFlag}
 
 	svcManager := newServiceManager(out)
 
@@ -190,29 +237,28 @@ func runIt() error {
 
 	{
 		cfg := mevboostrelay.DefaultConfig()
+		var err error
 		if cfg.LogOutput, err = out.LogOutput("mev-boost-relay"); err != nil {
-			return err
+			return nil, err
 		}
 		mevboostrelay.New(cfg)
 	}
 
 	fmt.Printf("All services started, press Ctrl+C to stop\n")
-
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, os.Interrupt)
-
-	select {
-	case <-sig:
-		fmt.Println("Stopping...")
-	case <-svcManager.NotifyErrCh():
-	}
-
-	svcManager.StopAndWait()
-	return nil
+	return svcManager, nil
 }
 
 type output struct {
 	dst string
+}
+
+func (o *output) Exists(path string) bool {
+	_, err := os.Stat(filepath.Join(o.dst))
+	return err == nil
+}
+
+func (o *output) Remove(path string) error {
+	return os.RemoveAll(filepath.Join(o.dst, path))
 }
 
 func (o *output) WriteBatch(data map[string]interface{}) error {
