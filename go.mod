@@ -5,6 +5,7 @@ go 1.21
 require (
 	github.com/alicebob/miniredis/v2 v2.32.1
 	github.com/attestantio/go-eth2-client v0.21.1
+	github.com/ethereum/go-ethereum v1.13.14
 	github.com/flashbots/go-boost-utils v1.8.0
 	github.com/flashbots/mev-boost-relay v0.29.2-0.20240705093628-4d4478a9c9dc
 	github.com/hashicorp/go-uuid v1.0.3
@@ -45,7 +46,6 @@ require (
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.3.0 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/ethereum/c-kzg-4844 v0.4.0 // indirect
-	github.com/ethereum/go-ethereum v1.13.14 // indirect
 	github.com/fatih/color v1.16.0 // indirect
 	github.com/ferranbt/fastssz v0.1.3 // indirect
 	github.com/flashbots/go-utils v0.5.0 // indirect
