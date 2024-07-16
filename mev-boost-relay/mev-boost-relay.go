@@ -2,6 +2,7 @@ package mevboostrelay
 
 import (
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -14,9 +15,7 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/flashbots/go-boost-utils/bls"
-	boostSsz "github.com/flashbots/go-boost-utils/ssz"
 	"github.com/flashbots/mev-boost-relay/beaconclient"
 	"github.com/flashbots/mev-boost-relay/common"
 	"github.com/flashbots/mev-boost-relay/database"
@@ -75,14 +74,18 @@ func New(config *Config) (*MevBoostRelay, error) {
 	}
 	log.Info("Beacon client synced")
 
-	// compute the builder domain with the DOMAIN_APPLICATION_BUILDER + genesis fork version
+	// get the spec and genesis info to compute the eth network details
+	spec, err := bClient.GetSpec()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get spec: %w", err)
+	}
 	info, err := bClient.GetGenesis()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get genesis: %w", err)
 	}
-	builderDomain, err := common.ComputeDomain(boostSsz.DomainTypeAppBuilder, info.Data.GenesisForkVersion, phase0.Root{}.String())
+	ethNetworkDetails, err := generateEthNetworkDetails(spec, info)
 	if err != nil {
-		return nil, fmt.Errorf("failed to compute builder domain: %w", err)
+		return nil, fmt.Errorf("failed to generate eth network details: %w", err)
 	}
 
 	// start redis in-memory
@@ -126,6 +129,7 @@ func New(config *Config) (*MevBoostRelay, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to start mock block validation service: %w", err)
 	}
+	log.Info("Started mock block validation service, addr: ", apiBlockSimURL)
 
 	// decode the secret key
 	envSkBytes, err := hex.DecodeString(strings.TrimPrefix(config.ApiSecretKey, "0x"))
@@ -138,20 +142,18 @@ func New(config *Config) (*MevBoostRelay, error) {
 	}
 
 	apiOpts := api.RelayAPIOpts{
-		Log:          log.WithField("service", "api"),
-		ListenAddr:   fmt.Sprintf("%s:%d", config.ApiListenAddr, config.ApiListenPort),
-		BeaconClient: bClient,
-		Datastore:    ds,
-		Redis:        redis,
-		DB:           pqDB,
-		SecretKey:    secretKey,
-		EthNetDetails: common.EthNetworkDetails{
-			Name:          "custom",
-			DomainBuilder: builderDomain, // this is the only one required to validate the validator registration
-		},
+		Log:             log.WithField("service", "api"),
+		ListenAddr:      fmt.Sprintf("%s:%d", config.ApiListenAddr, config.ApiListenPort),
+		BeaconClient:    bClient,
+		Datastore:       ds,
+		Redis:           redis,
+		DB:              pqDB,
+		SecretKey:       secretKey,
+		EthNetDetails:   *ethNetworkDetails,
 		BlockSimURL:     apiBlockSimURL,
 		ProposerAPI:     true,
 		BlockBuilderAPI: true,
+		DataAPI:         true,
 	}
 	apiSrv, err := api.NewRelayAPI(apiOpts)
 	if err != nil {
@@ -179,6 +181,27 @@ func New(config *Config) (*MevBoostRelay, error) {
 		apiSrv:         apiSrv,
 		housekeeperSrv: housekeeperSrv,
 	}, nil
+}
+
+func generateEthNetworkDetails(spec *beaconclient.GetSpecResponse, info *beaconclient.GetGenesisResponse) (*common.EthNetworkDetails, error) {
+	envs := map[string]string{
+		"GENESIS_FORK_VERSION":    info.Data.GenesisForkVersion,
+		"GENESIS_VALIDATORS_ROOT": info.Data.GenesisValidatorsRoot,
+		"BELLATRIX_FORK_VERSION":  spec.Data.BellatrixForkVersion,
+		"CAPELLA_FORK_VERSION":    spec.Data.CapellaForkVersion,
+		"DENEB_FORK_VERSION":      spec.Data.DenebForkVersion,
+	}
+	for k, v := range envs {
+		if err := os.Setenv(k, v); err != nil {
+			return nil, fmt.Errorf("failed to set env var %s: %w", k, err)
+		}
+	}
+
+	netDetails, err := common.NewEthNetworkDetails("custom")
+	if err != nil {
+		return nil, err
+	}
+	return netDetails, nil
 }
 
 func startInMemoryRedisDatastore() (*datastore.RedisCache, error) {
@@ -221,7 +244,8 @@ func startMockBlockValidationServiceServer() (string, error) {
 		}
 	}()
 
-	return listener.Addr().String(), nil
+	addr := fmt.Sprintf("http://localhost:%d", port)
+	return addr, nil
 }
 
 // inmemoryDB is an extension of the MockDB that stores the validator registry entries in memory.
@@ -230,14 +254,20 @@ type inmemoryDB struct {
 
 	validatorRegistryEntriesLock sync.Mutex
 	validatorRegistryEntries     map[string]*database.ValidatorRegistrationEntry
+
+	deliveredPayloadsLock sync.Mutex
+	deliveredPayloads     []*database.DeliveredPayloadEntry
 }
 
 func newInmemoryDB() *inmemoryDB {
 	return &inmemoryDB{
 		MockDB:                   &database.MockDB{},
 		validatorRegistryEntries: make(map[string]*database.ValidatorRegistrationEntry),
+		deliveredPayloads:        make([]*database.DeliveredPayloadEntry, 0),
 	}
 }
+
+// -- endpoints for the validator registry ---
 
 func (i *inmemoryDB) NumRegisteredValidators() (count uint64, err error) {
 	return uint64(len(i.validatorRegistryEntries)), nil
@@ -284,5 +314,66 @@ func (i *inmemoryDB) GetValidatorRegistrationsForPubkeys(pubkeys []string) ([]*d
 			entries = append(entries, entry)
 		}
 	}
+	return entries, nil
+}
+
+// -- endpoints for the delivered payloads ---
+
+func (i *inmemoryDB) SaveDeliveredPayload(bidTrace *common.BidTraceV2WithBlobFields, signedBlindedBeaconBlock *common.VersionedSignedBlindedBeaconBlock, signedAt time.Time, publishMs uint64) error {
+	i.deliveredPayloadsLock.Lock()
+	defer i.deliveredPayloadsLock.Unlock()
+
+	_signedBlindedBeaconBlock, err := json.Marshal(signedBlindedBeaconBlock)
+	if err != nil {
+		return err
+	}
+
+	deliveredPayloadEntry := database.DeliveredPayloadEntry{
+		SignedAt:                 database.NewNullTime(signedAt),
+		SignedBlindedBeaconBlock: database.NewNullString(string(_signedBlindedBeaconBlock)),
+
+		Slot:  bidTrace.Slot,
+		Epoch: bidTrace.Slot / common.SlotsPerEpoch,
+
+		BuilderPubkey:        bidTrace.BuilderPubkey.String(),
+		ProposerPubkey:       bidTrace.ProposerPubkey.String(),
+		ProposerFeeRecipient: bidTrace.ProposerFeeRecipient.String(),
+
+		ParentHash:  bidTrace.ParentHash.String(),
+		BlockHash:   bidTrace.BlockHash.String(),
+		BlockNumber: bidTrace.BlockNumber,
+
+		GasUsed:  bidTrace.GasUsed,
+		GasLimit: bidTrace.GasLimit,
+
+		NumTx: bidTrace.NumTx,
+		Value: bidTrace.Value.ToBig().String(),
+
+		NumBlobs:      bidTrace.NumBlobs,
+		BlobGasUsed:   bidTrace.BlobGasUsed,
+		ExcessBlobGas: bidTrace.ExcessBlobGas,
+
+		PublishMs: publishMs,
+	}
+
+	i.deliveredPayloads = append(i.deliveredPayloads, &deliveredPayloadEntry)
+	return nil
+}
+
+func (i *inmemoryDB) GetNumDeliveredPayloads() (uint64, error) {
+	i.deliveredPayloadsLock.Lock()
+	defer i.deliveredPayloadsLock.Unlock()
+
+	return uint64(len(i.deliveredPayloads)), nil
+}
+
+func (i *inmemoryDB) GetRecentDeliveredPayloads(filters database.GetPayloadsFilters) ([]*database.DeliveredPayloadEntry, error) {
+	// TODO: use the filters?
+	i.deliveredPayloadsLock.Lock()
+	defer i.deliveredPayloadsLock.Unlock()
+
+	entries := make([]*database.DeliveredPayloadEntry, 0, len(i.deliveredPayloads))
+	entries = append(entries, i.deliveredPayloads...)
+
 	return entries, nil
 }
