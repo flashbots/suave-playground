@@ -4,7 +4,6 @@ go 1.21
 
 require (
 	github.com/alicebob/miniredis/v2 v2.32.1
-	github.com/attestantio/go-eth2-client v0.21.1
 	github.com/ethereum/go-ethereum v1.13.14
 	github.com/flashbots/go-boost-utils v1.8.0
 	github.com/flashbots/mev-boost-relay v0.29.2-0.20240716110640-cd42336bd069
@@ -25,6 +24,7 @@ require (
 	github.com/alicebob/gopher-json v0.0.0-20200520072559-a9ecdc9d1d3a // indirect
 	github.com/allegro/bigcache v1.2.1 // indirect
 	github.com/attestantio/go-builder-client v0.4.3-0.20240124194555-d44db06f45fa // indirect
+	github.com/attestantio/go-eth2-client v0.21.1 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bits-and-blooms/bitset v1.10.0 // indirect
 	github.com/bradfitz/gomemcache v0.0.0-20230124162541-5f7a7d875746 // indirect
@@ -114,8 +114,6 @@ require (
 	github.com/stretchr/testify v1.9.0 // indirect
 	github.com/supranational/blst v0.3.11 // indirect
 	github.com/syndtr/goleveldb v1.0.1-0.20220721030215-126854af5e6d // indirect
-	github.com/tdewolff/minify v2.3.6+incompatible // indirect
-	github.com/tdewolff/parse v2.3.4+incompatible // indirect
 	github.com/thomaso-mirodin/intmath v0.0.0-20160323211736-5dc6d854e46e // indirect
 	github.com/tklauser/go-sysconf v0.3.12 // indirect
 	github.com/tklauser/numcpus v0.6.1 // indirect
