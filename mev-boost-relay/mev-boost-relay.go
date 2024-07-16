@@ -39,7 +39,7 @@ func DefaultConfig() *Config {
 		ApiListenAddr:    "127.0.0.1",
 		ApiListenPort:    5555,
 		ApiSecretKey:     defaultSecretKey,
-		BeaconClientAddr: "http://localhost:8000",
+		BeaconClientAddr: "http://localhost:3500",
 		LogOutput:        os.Stdout,
 	}
 }

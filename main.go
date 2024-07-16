@@ -185,7 +185,7 @@ func setupServices() (*serviceManager, error) {
 			"--chain", "{{.Dir}}/testnet/genesis.json",
 			"--datadir", "{{.Dir}}/data_reth",
 			"--http",
-			"--http.port", "6000",
+			"--http.port", "8545",
 			"--authrpc.port", "5000",
 			"--authrpc.jwtsecret", "{{.Dir}}/jwtsecret",
 		).
@@ -209,7 +209,7 @@ func setupServices() (*serviceManager, error) {
 			"--enr-quic-port", "9100",
 			"--port", "9000",
 			"--quic-port", "9100",
-			"--http-port", "8000",
+			"--http-port", "3500",
 			"--disable-packet-filter",
 			"--target-peers", "0",
 			"--execution-endpoint", "http://localhost:5000",
@@ -230,7 +230,7 @@ func setupServices() (*serviceManager, error) {
 			"--datadir", "{{.Dir}}/data_validator",
 			"--testnet-dir", "{{.Dir}}/testnet",
 			"--init-slashing-protection",
-			"--beacon-nodes", "http://localhost:8000",
+			"--beacon-nodes", "http://localhost:3500",
 			"--suggested-fee-recipient", "0x690B9A9E9aa1C9dB991C7721a92d351Db4FaC990",
 			"--builder-proposals",
 		).Run()
