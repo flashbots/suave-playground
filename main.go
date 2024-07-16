@@ -156,7 +156,7 @@ func setupArtifacts() error {
 	err = out.WriteBatch(map[string]interface{}{
 		"testnet/config.yaml":                 func() ([]byte, error) { return convert(config) },
 		"testnet/genesis.ssz":                 state,
-		"testnet/genesis.json":                gen,
+		"genesis.json":                        gen,
 		"jwtsecret":                           defaultJWTToken,
 		"testnet/boot_enr.yaml":               "[]",
 		"testnet/deploy_block.txt":            "0",
@@ -182,7 +182,7 @@ func setupServices() (*serviceManager, error) {
 		WithArgs(
 			"reth",
 			"node",
-			"--chain", "{{.Dir}}/testnet/genesis.json",
+			"--chain", "{{.Dir}}/genesis.json",
 			"--datadir", "{{.Dir}}/data_reth",
 			"--http",
 			"--http.port", "8545",
