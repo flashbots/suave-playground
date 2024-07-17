@@ -368,12 +368,31 @@ func (i *inmemoryDB) GetNumDeliveredPayloads() (uint64, error) {
 }
 
 func (i *inmemoryDB) GetRecentDeliveredPayloads(filters database.GetPayloadsFilters) ([]*database.DeliveredPayloadEntry, error) {
-	// TODO: use the filters?
 	i.deliveredPayloadsLock.Lock()
 	defer i.deliveredPayloadsLock.Unlock()
 
-	entries := make([]*database.DeliveredPayloadEntry, 0, len(i.deliveredPayloads))
-	entries = append(entries, i.deliveredPayloads...)
+	entries := []*database.DeliveredPayloadEntry{}
+	for _, entry := range i.deliveredPayloads {
+		if filterPayload(entry, filters) {
+			entries = append(entries, i.deliveredPayloads...)
+		}
+	}
 
 	return entries, nil
+}
+
+func filterPayload(entry *database.DeliveredPayloadEntry, filter database.GetPayloadsFilters) bool {
+	if filter.BlockNumber != 0 {
+		if entry.BlockNumber != uint64(filter.BlockNumber) {
+			return false
+		}
+	}
+
+	if filter.BuilderPubkey != "" {
+		if entry.BuilderPubkey != filter.BuilderPubkey {
+			return false
+		}
+	}
+
+	return true
 }
