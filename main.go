@@ -21,6 +21,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	ecrypto "github.com/ethereum/go-ethereum/crypto"
 
+	"github.com/ferranbt/suave-playground/artifacts"
 	mevboostrelay "github.com/ferranbt/suave-playground/mev-boost-relay"
 
 	"github.com/hashicorp/go-uuid"
@@ -50,9 +51,19 @@ var rootCmd = &cobra.Command{
 	},
 }
 
+var downloadArtifactsCmd = &cobra.Command{
+	Use:   "download-artifacts",
+	Short: "Download the artifacts",
+	Long:  `Download the artifacts`,
+	Run: func(cmd *cobra.Command, args []string) {
+		artifacts.DownloadArtifacts()
+	},
+}
+
 func main() {
 	rootCmd.Flags().StringVar(&outputFlag, "output", "local-testnet", "")
 	rootCmd.Flags().BoolVar(&resetFlag, "reset", false, "")
+	rootCmd.AddCommand(downloadArtifactsCmd)
 	rootCmd.Execute()
 }
 
