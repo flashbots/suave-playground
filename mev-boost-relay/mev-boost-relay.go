@@ -373,8 +373,9 @@ func (i *inmemoryDB) GetRecentDeliveredPayloads(filters database.GetPayloadsFilt
 
 	entries := []*database.DeliveredPayloadEntry{}
 	for _, entry := range i.deliveredPayloads {
-		if filterPayload(entry, filters) {
-			entries = append(entries, i.deliveredPayloads...)
+		filtered := filterPayload(entry, filters)
+		if !filtered {
+			entries = append(entries, entry)
 		}
 	}
 
@@ -384,15 +385,15 @@ func (i *inmemoryDB) GetRecentDeliveredPayloads(filters database.GetPayloadsFilt
 func filterPayload(entry *database.DeliveredPayloadEntry, filter database.GetPayloadsFilters) bool {
 	if filter.BlockNumber != 0 {
 		if entry.BlockNumber != uint64(filter.BlockNumber) {
-			return false
+			return true
 		}
 	}
 
 	if filter.BuilderPubkey != "" {
 		if entry.BuilderPubkey != filter.BuilderPubkey {
-			return false
+			return true
 		}
 	}
 
-	return true
+	return false
 }
