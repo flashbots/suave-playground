@@ -8,35 +8,97 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 )
 
-func DownloadArtifacts() {
-	// Replace these with your desired values
-	outputDir := "output"
-
-	// Create output directory if it doesn't exist
-	if err := os.MkdirAll(outputDir, 0755); err != nil {
-		fmt.Printf("Error creating output directory: %v", err)
-		return
-	}
-
-	// Download and extract the artifact
-	rethURL := "https://github.com/paradigmxyz/reth/releases/download/v1.0.0/reth-v1.0.0-x86_64-unknown-linux-gnu.tar.gz"
-	fmt.Println("Downloading Reth binary")
-	if err := downloadArtifact(rethURL, outputDir); err != nil {
-		fmt.Printf("Error downloading artifact: %v", err)
-		return
-	}
-
-	lighthouseURL := "https://github.com/sigp/lighthouse/releases/download/v5.2.1/lighthouse-v5.2.1-x86_64-unknown-linux-gnu.tar.gz"
-	fmt.Println("Downloading Lighthouse binary")
-	if err := downloadArtifact(lighthouseURL, outputDir); err != nil {
-		fmt.Printf("Error downloading artifact: %v", err)
-		return
-	}
+type release struct {
+	Name    string
+	Org     string
+	Version string
+	Arch    func(string, string) string
 }
 
-func downloadArtifact(url string, outputDir string) error {
+func DownloadArtifacts() (map[string]string, error) {
+	var artifacts = []release{
+		{
+			Name:    "reth",
+			Org:     "paradigmxyz",
+			Version: "v1.0.2",
+			Arch: func(goos, goarch string) string {
+				if goos == "linux" {
+					return "x86_64-unknown-linux-gnu"
+				} else if goos == "darwin" && goarch == "arm64" { // Apple M1
+					return "aarch64-apple-darwin"
+				} else if goos == "darwin" && goarch == "x86_64" {
+					return "x86_64-apple-darwin"
+				}
+				return ""
+			},
+		},
+		{
+			Name:    "lighthouse",
+			Org:     "sigp",
+			Version: "v5.2.1",
+			Arch: func(goos, goarch string) string {
+				if goos == "linux" {
+					return "x86_64-unknown-linux-gnu"
+				} else if goos == "darwin" && goarch == "arm64" { // Apple M1
+					return "x86_64-apple-darwin-portable"
+				} else if goos == "darwin" && goarch == "x86_64" {
+					return "x86_64-apple-darwin"
+				}
+				return ""
+			},
+		},
+	}
+
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return nil, fmt.Errorf("error getting user home directory: %w", err)
+	}
+
+	// Define the path for our custom home directory
+	customHomeDir := filepath.Join(homeDir, ".playground")
+
+	// Create output directory if it doesn't exist
+	if err := os.MkdirAll(customHomeDir, 0755); err != nil {
+		return nil, fmt.Errorf("error creating output directory: %v", err)
+	}
+
+	goos := runtime.GOOS
+	goarch := runtime.GOARCH
+
+	releases := make(map[string]string)
+	for _, artifact := range artifacts {
+		archVersion := artifact.Arch(goos, goarch)
+		if archVersion == "" {
+			return nil, fmt.Errorf("unsupported OS/Arch: %s/%s", goos, goarch)
+		}
+
+		outPath := filepath.Join(customHomeDir, artifact.Name+"-"+artifact.Version)
+		_, err := os.Stat(outPath)
+		if err != nil {
+			if !os.IsNotExist(err) {
+				return nil, fmt.Errorf("error checking file existence: %v", err)
+			} else {
+				releasesURL := fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/%s-%s-%s.tar.gz", artifact.Org, artifact.Name, artifact.Version, artifact.Name, artifact.Version, artifact.Arch(goos, goarch))
+				fmt.Printf("Downloading %s: %s\n", outPath, releasesURL)
+
+				if err := downloadArtifact(releasesURL, artifact.Name, filepath.Join(customHomeDir, artifact.Name+"-"+artifact.Version)); err != nil {
+					return nil, fmt.Errorf("error downloading artifact: %v", err)
+				}
+			}
+		} else {
+			fmt.Printf("%s already exists, skipping download\n", outPath)
+		}
+
+		releases[artifact.Name] = outPath
+	}
+
+	return releases, nil
+}
+
+func downloadArtifact(url string, expectedFile string, outPath string) error {
 	// Download the file
 	resp, err := http.Get(url)
 	if err != nil {
@@ -55,6 +117,7 @@ func downloadArtifact(url string, outputDir string) error {
 	tarReader := tar.NewReader(gzipReader)
 
 	// Extract the file
+	var found bool
 	for {
 		header, err := tarReader.Next()
 		if err == io.EOF {
@@ -65,7 +128,9 @@ func downloadArtifact(url string, outputDir string) error {
 		}
 
 		if header.Typeflag == tar.TypeReg {
-			outPath := filepath.Join(outputDir, header.Name)
+			if header.Name != expectedFile {
+				return fmt.Errorf("unexpected file in archive: %s", header.Name)
+			}
 			outFile, err := os.Create(outPath)
 			if err != nil {
 				return fmt.Errorf("error creating output file: %v", err)
@@ -80,9 +145,13 @@ func downloadArtifact(url string, outputDir string) error {
 			if err := os.Chmod(outPath, 0755); err != nil {
 				return fmt.Errorf("error changing permissions: %v", err)
 			}
+			found = true
 			break // Assuming there's only one file per repo
 		}
 	}
 
+	if !found {
+		return fmt.Errorf("file not found in archive: %s", expectedFile)
+	}
 	return nil
 }

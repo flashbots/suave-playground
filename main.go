@@ -41,6 +41,7 @@ var defaultJWTToken = "04592280e1778419b7aa954d43871cb2cfb2ebda754fb735e8adeb293
 
 var outputFlag string
 var resetFlag bool
+var useBinPathFlag bool
 
 var rootCmd = &cobra.Command{
 	Use:   "crucible",
@@ -55,14 +56,17 @@ var downloadArtifactsCmd = &cobra.Command{
 	Use:   "download-artifacts",
 	Short: "Download the artifacts",
 	Long:  `Download the artifacts`,
-	Run: func(cmd *cobra.Command, args []string) {
-		artifacts.DownloadArtifacts()
+	RunE: func(cmd *cobra.Command, args []string) error {
+		_, err := artifacts.DownloadArtifacts()
+		return err
 	},
 }
 
 func main() {
 	rootCmd.Flags().StringVar(&outputFlag, "output", "local-testnet", "")
 	rootCmd.Flags().BoolVar(&resetFlag, "reset", false, "")
+	rootCmd.Flags().BoolVar(&useBinPathFlag, "use-bin-path", false, "")
+
 	rootCmd.AddCommand(downloadArtifactsCmd)
 	rootCmd.Execute()
 }
@@ -183,6 +187,25 @@ func setupArtifacts() error {
 }
 
 func setupServices() (*serviceManager, error) {
+	var (
+		rethBin, lighthouseBin string
+	)
+
+	if useBinPathFlag {
+		fmt.Println("Using binaries from the PATH")
+
+		rethBin = "reth"
+		lighthouseBin = "lighthouse"
+	} else {
+		binArtifacts, err := artifacts.DownloadArtifacts()
+		if err != nil {
+			return nil, err
+		}
+
+		rethBin = binArtifacts["reth"]
+		lighthouseBin = binArtifacts["lighthouse"]
+	}
+
 	out := &output{dst: outputFlag}
 
 	svcManager := newServiceManager(out)
@@ -191,13 +214,13 @@ func setupServices() (*serviceManager, error) {
 	svcManager.
 		NewService("reth").
 		WithArgs(
-			"reth",
+			rethBin,
 			"node",
 			"--chain", "{{.Dir}}/genesis.json",
 			"--datadir", "{{.Dir}}/data_reth",
 			"--http",
 			"--http.port", "8545",
-			"--authrpc.port", "5000",
+			"--authrpc.port", "8551",
 			"--authrpc.jwtsecret", "{{.Dir}}/jwtsecret",
 		).
 		Run()
@@ -206,7 +229,7 @@ func setupServices() (*serviceManager, error) {
 	svcManager.
 		NewService("beacon_node").
 		WithArgs(
-			"lighthouse",
+			lighthouseBin,
 			"bn",
 			"--datadir", "{{.Dir}}/data_beacon_node",
 			"--testnet-dir", "{{.Dir}}/testnet",
@@ -223,7 +246,7 @@ func setupServices() (*serviceManager, error) {
 			"--http-port", "3500",
 			"--disable-packet-filter",
 			"--target-peers", "0",
-			"--execution-endpoint", "http://localhost:5000",
+			"--execution-endpoint", "http://localhost:8551",
 			"--execution-jwt", "{{.Dir}}/jwtsecret",
 			"--builder", "http://localhost:5555",
 			"--builder-fallback-epochs-since-finalization", "0",
@@ -236,7 +259,8 @@ func setupServices() (*serviceManager, error) {
 	// start validator client
 	svcManager.
 		NewService("validator").
-		WithArgs("lighthouse",
+		WithArgs(
+			lighthouseBin,
 			"vc",
 			"--datadir", "{{.Dir}}/data_validator",
 			"--testnet-dir", "{{.Dir}}/testnet",
