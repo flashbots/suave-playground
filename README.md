@@ -1,21 +1,16 @@
 # Suave playground
 
-Make sure you have both `reth` and `lighthouse` installed:
-
-```
-$ which reth
-$ which lighthouse
-```
-
 Run the playground:
 
 ```
 $ go run main.go
 ```
 
-The playground runs four services:
+The command:
 
-- A `lighthouse` beacon node service.
-- A `lighthouse` validator service.
-- A `reth` execution client service.
-- An in-memory `mev-boost-relay` service.
+- Installs `reth` and `lighthouse` in `$HOME/.playground`.
+- Creates a beacon chain genesis.
+- Deploys a beacon chain with 1 proposer and 80 validators.
+- Starts the beacon chain and validator.
+- Starts the reth client.
+- Start an in-memory mev-boost-relay.
