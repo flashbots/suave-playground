@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/ecdsa"
 	_ "embed"
 	"encoding/hex"
 	"encoding/json"
@@ -127,12 +128,7 @@ func setupArtifacts() error {
 	prefundedBalance, _ := new(big.Int).SetString("10000000000000000000000", 16)
 
 	for _, privStr := range prefundedAccounts {
-		privBuf, err := hex.DecodeString(strings.TrimPrefix(privStr, "0x"))
-		if err != nil {
-			return err
-		}
-
-		priv, err := ecrypto.ToECDSA(privBuf)
+		priv, err := getPrivKey(privStr)
 		if err != nil {
 			return err
 		}
@@ -186,6 +182,19 @@ func setupArtifacts() error {
 	return nil
 }
 
+func getPrivKey(privStr string) (*ecdsa.PrivateKey, error) {
+	privBuf, err := hex.DecodeString(strings.TrimPrefix(privStr, "0x"))
+	if err != nil {
+		return nil, err
+	}
+
+	priv, err := ecrypto.ToECDSA(privBuf)
+	if err != nil {
+		return nil, err
+	}
+	return priv, nil
+}
+
 func setupServices() (*serviceManager, error) {
 	var (
 		rethBin, lighthouseBin string
@@ -205,6 +214,14 @@ func setupServices() (*serviceManager, error) {
 		rethBin = binArtifacts["reth"]
 		lighthouseBin = binArtifacts["lighthouse"]
 	}
+
+	// log the prefunded accounts
+	fmt.Printf("\nPrefunded accounts:\n==================\n")
+	for indx, acc := range prefundedAccounts {
+		priv, _ := getPrivKey(acc)
+		fmt.Printf("(%d) %s (%s)\n", indx, acc, ecrypto.PubkeyToAddress(priv.PublicKey).Hex())
+	}
+	fmt.Println("")
 
 	out := &output{dst: outputFlag}
 
