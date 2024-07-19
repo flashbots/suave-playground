@@ -330,11 +330,11 @@ func setupServices() (*serviceManager, error) {
 		cfg := mevboostrelay.DefaultConfig()
 		var err error
 		if cfg.LogOutput, err = out.LogOutput("mev-boost-relay"); err != nil {
-			return nil, err
+			return svcManager, err
 		}
 		relay, err := mevboostrelay.New(cfg)
 		if err != nil {
-			return nil, err
+			return svcManager, err
 		}
 
 		go func() {
