@@ -126,8 +126,8 @@ func runIt() error {
 		fmt.Println("Artifacts already exist, skipping setup")
 	}
 
-	svcManager, err := setupServices()
-	if err != nil {
+	svcManager := newServiceManager(out)
+	if err := setupServices(svcManager, out); err != nil {
 		// close all services if there was an error
 		svcManager.StopAndWait()
 		return err
@@ -234,7 +234,7 @@ func getPrivKey(privStr string) (*ecdsa.PrivateKey, error) {
 	return priv, nil
 }
 
-func setupServices() (*serviceManager, error) {
+func setupServices(svcManager *serviceManager, out *output) error {
 	var (
 		rethBin, lighthouseBin string
 	)
@@ -247,7 +247,7 @@ func setupServices() (*serviceManager, error) {
 	} else {
 		binArtifacts, err := artifacts.DownloadArtifacts()
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		rethBin = binArtifacts["reth"]
@@ -261,10 +261,6 @@ func setupServices() (*serviceManager, error) {
 		fmt.Printf("(%d) %s (%s)\n", indx, acc, ecrypto.PubkeyToAddress(priv.PublicKey).Hex())
 	}
 	fmt.Println("")
-
-	out := &output{dst: outputFlag}
-
-	svcManager := newServiceManager(out)
 
 	// start the reth el client
 	svcManager.
@@ -330,11 +326,11 @@ func setupServices() (*serviceManager, error) {
 		cfg := mevboostrelay.DefaultConfig()
 		var err error
 		if cfg.LogOutput, err = out.LogOutput("mev-boost-relay"); err != nil {
-			return svcManager, err
+			return err
 		}
 		relay, err := mevboostrelay.New(cfg)
 		if err != nil {
-			return svcManager, err
+			return err
 		}
 
 		go func() {
@@ -345,7 +341,7 @@ func setupServices() (*serviceManager, error) {
 	}
 
 	fmt.Printf("All services started, press Ctrl+C to stop\n")
-	return svcManager, nil
+	return nil
 }
 
 type output struct {
