@@ -91,6 +91,8 @@ func runIt() error {
 
 	svcManager, err := setupServices()
 	if err != nil {
+		// close all services if there was an error
+		svcManager.StopAndWait()
 		return err
 	}
 
@@ -293,7 +295,16 @@ func setupServices() (*serviceManager, error) {
 		if cfg.LogOutput, err = out.LogOutput("mev-boost-relay"); err != nil {
 			return nil, err
 		}
-		mevboostrelay.New(cfg)
+		relay, err := mevboostrelay.New(cfg)
+		if err != nil {
+			return nil, err
+		}
+
+		go func() {
+			if err := relay.Start(); err != nil {
+				svcManager.emitError()
+			}
+		}()
 	}
 
 	fmt.Printf("All services started, press Ctrl+C to stop\n")
@@ -448,6 +459,13 @@ func newServiceManager(out *output) *serviceManager {
 	return &serviceManager{out: out, handles: []*exec.Cmd{}, stopping: atomic.Bool{}, wg: sync.WaitGroup{}, closeCh: make(chan struct{}, 5)}
 }
 
+func (s *serviceManager) emitError() {
+	select {
+	case s.closeCh <- struct{}{}:
+	default:
+	}
+}
+
 func (s *serviceManager) Run(ss *service) {
 	cmd := exec.Command(ss.args[0], ss.args[1:]...)
 
@@ -472,11 +490,7 @@ func (s *serviceManager) Run(ss *service) {
 			}
 		}
 		s.wg.Done()
-
-		select {
-		case s.closeCh <- struct{}{}:
-		default:
-		}
+		s.emitError()
 	}()
 
 	s.handles = append(s.handles, cmd)

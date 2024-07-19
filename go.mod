@@ -9,6 +9,7 @@ require (
 	github.com/flashbots/mev-boost-relay v0.29.2-0.20240716110640-cd42336bd069
 	github.com/hashicorp/go-uuid v1.0.3
 	github.com/prysmaticlabs/prysm/v5 v5.0.0
+	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/cobra v1.8.0
 	github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4 v1.1.3
 	gopkg.in/yaml.v2 v2.4.0
@@ -109,7 +110,6 @@ require (
 	github.com/rubenv/sql-migrate v1.5.2 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/shirou/gopsutil v3.21.11+incompatible // indirect
-	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/stretchr/testify v1.9.0 // indirect
 	github.com/supranational/blst v0.3.11 // indirect

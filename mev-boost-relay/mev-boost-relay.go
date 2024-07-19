@@ -22,6 +22,7 @@ import (
 	"github.com/flashbots/mev-boost-relay/datastore"
 	"github.com/flashbots/mev-boost-relay/services/api"
 	"github.com/flashbots/mev-boost-relay/services/housekeeper"
+	"github.com/sirupsen/logrus"
 )
 
 var defaultSecretKey = "5eae315483f028b5cdd5d1090ff0c7618b18737ea9bf3c35047189db22835c48"
@@ -45,6 +46,7 @@ func DefaultConfig() *Config {
 }
 
 type MevBoostRelay struct {
+	log            *logrus.Entry
 	apiSrv         *api.RelayAPI
 	housekeeperSrv *housekeeper.Housekeeper
 }
@@ -116,12 +118,6 @@ func New(config *Config) (*MevBoostRelay, error) {
 	}
 
 	housekeeperSrv := housekeeper.NewHousekeeper(housekeeperOpts)
-	log.Info("Starting housekeeper service...")
-	go func() {
-		if err := housekeeperSrv.Start(); err != nil {
-			log.WithError(err).Error("Housekeeper service failed")
-		}
-	}()
 
 	// start a mock block validation service that always
 	// returns the blocks as valids.
@@ -160,27 +156,43 @@ func New(config *Config) (*MevBoostRelay, error) {
 		return nil, fmt.Errorf("failed to create service")
 	}
 
+	return &MevBoostRelay{
+		log:            log,
+		apiSrv:         apiSrv,
+		housekeeperSrv: housekeeperSrv,
+	}, nil
+}
+
+func (m *MevBoostRelay) Start() error {
+	errChan := make(chan error, 2)
+
+	m.log.Info("Starting housekeeper service...")
 	go func() {
-		if err := apiSrv.StartServer(); err != nil {
-			log.WithError(err).Error("service failed")
-		}
+		err := m.housekeeperSrv.Start()
+		m.log.WithError(err).Error("Housekeeper service stopped")
+		errChan <- err
+	}()
+
+	m.log.Info("Starting API service...")
+	go func() {
+		err := m.apiSrv.StartServer()
+		m.log.WithError(err).Error("API service stopped")
+		errChan <- err
 	}()
 
 	go func() {
 		// We only require to do this at startup once, because otherwise we will
 		// just keep with the normal workflow of the mev-boost-relay.
-		<-apiSrv.ValidatorUpdateCh()
+		<-m.apiSrv.ValidatorUpdateCh()
 
-		log.Info("Forcing validator registration at startup")
+		m.log.Info("Forcing validator registration at startup")
 
-		housekeeperSrv.UpdateProposerDutiesWithoutChecks(0)
-		apiSrv.UpdateProposerDutiesWithoutChecks(0)
+		m.housekeeperSrv.UpdateProposerDutiesWithoutChecks(0)
+		m.apiSrv.UpdateProposerDutiesWithoutChecks(0)
 	}()
 
-	return &MevBoostRelay{
-		apiSrv:         apiSrv,
-		housekeeperSrv: housekeeperSrv,
-	}, nil
+	err := <-errChan
+	return err
 }
 
 func generateEthNetworkDetails(spec *beaconclient.GetSpecResponse, info *beaconclient.GetGenesisResponse) (*common.EthNetworkDetails, error) {
