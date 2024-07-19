@@ -19,6 +19,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/flashbots/mev-boost-relay/beaconclient"
+	mevRCommon "github.com/flashbots/mev-boost-relay/common"
+
 	"github.com/ethereum/go-ethereum/core/types"
 	ecrypto "github.com/ethereum/go-ethereum/crypto"
 
@@ -63,12 +66,43 @@ var downloadArtifactsCmd = &cobra.Command{
 	},
 }
 
+var numBlocksValidate uint64
+
+var validateCmd = &cobra.Command{
+	Use:  "validate",
+	Long: `Validate the playground`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		// Test that blocks are being produced
+		log := mevRCommon.LogSetup(false, "info")
+		clt := beaconclient.NewProdBeaconInstance(log, "http://localhost:3500", "http://localhost:3500")
+
+		ch := make(chan beaconclient.HeadEventData)
+		go clt.SubscribeToHeadEvents(ch)
+
+		var lastSlot uint64
+		for i := uint64(0); i < numBlocksValidate; i++ {
+			head := <-ch
+			if lastSlot != 0 && lastSlot+1 != head.Slot {
+				return fmt.Errorf("slot mismatch, expected %d, got %d", lastSlot+1, head.Slot)
+			}
+
+			log.Info("Slot: %d Block: %s", head.Slot, head.Block)
+			lastSlot = head.Slot
+
+		}
+
+		return nil
+	},
+}
+
 func main() {
 	rootCmd.Flags().StringVar(&outputFlag, "output", "local-testnet", "")
 	rootCmd.Flags().BoolVar(&resetFlag, "reset", false, "")
 	rootCmd.Flags().BoolVar(&useBinPathFlag, "use-bin-path", false, "")
+	downloadArtifactsCmd.Flags().Uint64Var(&numBlocksValidate, "num-blocks", 5, "")
 
 	rootCmd.AddCommand(downloadArtifactsCmd)
+	rootCmd.AddCommand(validateCmd)
 	rootCmd.Execute()
 }
 
