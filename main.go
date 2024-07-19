@@ -81,14 +81,16 @@ var validateCmd = &cobra.Command{
 
 		var lastSlot uint64
 		for i := uint64(0); i < numBlocksValidate; i++ {
-			head := <-ch
+			select {
+			case head := <-ch:
 			if lastSlot != 0 && lastSlot+1 != head.Slot {
 				return fmt.Errorf("slot mismatch, expected %d, got %d", lastSlot+1, head.Slot)
 			}
 
 			log.Info("Slot: %d Block: %s", head.Slot, head.Block)
 			lastSlot = head.Slot
-
+		case time.After(20 * time.Second):
+			return fmt.Errorf("timeout waiting for block")
 		}
 
 		return nil
