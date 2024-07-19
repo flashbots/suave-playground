@@ -24,7 +24,7 @@ jobs:
           go-version: 1.22
 
       - name: Run playground
-        run: go run main.go & /tmp/playground
+        run: go run main.go --output /tmp/playground &
 
       - name: Validate that blocks are created
         run: go run main.go validate
