@@ -87,7 +87,7 @@ var validateCmd = &cobra.Command{
 					return fmt.Errorf("slot mismatch, expected %d, got %d", lastSlot+1, head.Slot)
 				}
 
-				log.Info("Slot: %d Block: %s", head.Slot, head.Block)
+				log.Infof("Slot: %d Block: %s", head.Slot, head.Block)
 				lastSlot = head.Slot
 			case <-time.After(20 * time.Second):
 				return fmt.Errorf("timeout waiting for block")
@@ -180,7 +180,7 @@ func setupArtifacts() error {
 
 	block := gen.ToBlock()
 
-	v, err := version.FromString("capella")
+	v, err := version.FromString("deneb") // TODO: Derive from config.toml
 	if err != nil {
 		return err
 	}
