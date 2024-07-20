@@ -27,10 +27,13 @@ jobs:
         run: go run main.go download-artifacts
 
       - name: Run playground
-        run: go run main.go --output /tmp/playground &
+        run: go run main.go --output /tmp/playground & > /tmp/playground.log 2>&1
 
       - name: Validate that blocks are created
         run: go run main.go validate
+
+      - name: Move playground logs
+        run: mv /tmp/playground.log /tmp/playground/logs
 
       - name: Archive playground logs
         uses: actions/upload-artifact@v4
