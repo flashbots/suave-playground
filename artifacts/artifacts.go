@@ -68,6 +68,8 @@ func DownloadArtifacts() (map[string]string, error) {
 	goos := runtime.GOOS
 	goarch := runtime.GOARCH
 
+	fmt.Printf("Architecture detected: %s/%s\n", goos, goarch)
+
 	releases := make(map[string]string)
 	for _, artifact := range artifacts {
 		archVersion := artifact.Arch(goos, goarch)
