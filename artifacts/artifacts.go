@@ -29,7 +29,7 @@ func DownloadArtifacts() (map[string]string, error) {
 					return "x86_64-unknown-linux-gnu"
 				} else if goos == "darwin" && goarch == "arm64" { // Apple M1
 					return "aarch64-apple-darwin"
-				} else if goos == "darwin" && goarch == "x86_64" {
+				} else if goos == "darwin" && goarch == "amd64" {
 					return "x86_64-apple-darwin"
 				}
 				return ""
@@ -44,7 +44,7 @@ func DownloadArtifacts() (map[string]string, error) {
 					return "x86_64-unknown-linux-gnu"
 				} else if goos == "darwin" && goarch == "arm64" { // Apple M1
 					return "x86_64-apple-darwin-portable"
-				} else if goos == "darwin" && goarch == "x86_64" {
+				} else if goos == "darwin" && goarch == "amd64" {
 					return "x86_64-apple-darwin"
 				}
 				return ""
