@@ -62,7 +62,7 @@ func New(config *Config) (*MevBoostRelay, error) {
 
 	// wait until the beacon client is ready, otherwise, the api and housekeeper services
 	// will fail at startup
-	syncTimeoutCh := time.After(5 * time.Second)
+	syncTimeoutCh := time.After(10 * time.Second)
 	for {
 		if _, err := bClient.BestSyncStatus(); err == nil {
 			break

@@ -333,7 +333,7 @@ func setupServices(svcManager *serviceManager, out *output) error {
 		}
 		relay, err := mevboostrelay.New(cfg)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to create relay: %w", err)
 		}
 
 		go func() {
