@@ -106,7 +106,10 @@ func main() {
 
 	rootCmd.AddCommand(downloadArtifactsCmd)
 	rootCmd.AddCommand(validateCmd)
-	rootCmd.Execute()
+	if err := rootCmd.Execute(); err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 }
 
 func runIt() error {
