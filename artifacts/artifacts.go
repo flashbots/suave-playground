@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 )
@@ -70,20 +71,32 @@ func DownloadArtifacts() (map[string]string, error) {
 
 	fmt.Printf("Architecture detected: %s/%s\n", goos, goarch)
 
+	// Try to download the release binaries for 'reth' and 'lighthouse'. It works as follows:
+	// 1. Check under $HOME/.playground if the binary-<version> exists. If exists, use it.
+	// 2. If the binary does not exists, use the arch and os to download the binary from the release page.
+	// 3. If the architecture is not supported, check if the binary is found in PATH.
 	releases := make(map[string]string)
 	for _, artifact := range artifacts {
-		archVersion := artifact.Arch(goos, goarch)
-		if archVersion == "" {
-			return nil, fmt.Errorf("unsupported OS/Arch: %s/%s", goos, goarch)
-		}
-
 		outPath := filepath.Join(customHomeDir, artifact.Name+"-"+artifact.Version)
 		_, err := os.Stat(outPath)
+		if err != nil && !os.IsNotExist(err) {
+			return nil, fmt.Errorf("error checking file existence: %v", err)
+		}
+
 		if err != nil {
-			if !os.IsNotExist(err) {
-				return nil, fmt.Errorf("error checking file existence: %v", err)
+			archVersion := artifact.Arch(goos, goarch)
+			if archVersion == "" {
+				// Case 2. The architecture is not supported.
+				fmt.Printf("unsupported OS/Arch: %s/%s\n", goos, goarch)
+				if _, err := exec.LookPath(artifact.Name); err != nil {
+					return nil, fmt.Errorf("error looking up binary in PATH: %v", err)
+				} else {
+					outPath = artifact.Name
+					fmt.Printf("Using %s from PATH\n", artifact.Name)
+				}
 			} else {
-				releasesURL := fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/%s-%s-%s.tar.gz", artifact.Org, artifact.Name, artifact.Version, artifact.Name, artifact.Version, artifact.Arch(goos, goarch))
+				// Case 3. Download the binary from the release page
+				releasesURL := fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/%s-%s-%s.tar.gz", artifact.Org, artifact.Name, artifact.Version, artifact.Name, artifact.Version, archVersion)
 				fmt.Printf("Downloading %s: %s\n", outPath, releasesURL)
 
 				if err := downloadArtifact(releasesURL, artifact.Name, filepath.Join(customHomeDir, artifact.Name+"-"+artifact.Version)); err != nil {
@@ -91,6 +104,7 @@ func DownloadArtifacts() (map[string]string, error) {
 				}
 			}
 		} else {
+			// Case 1. Use the binary in $HOME/.playground
 			fmt.Printf("%s already exists, skipping download\n", outPath)
 		}
 
