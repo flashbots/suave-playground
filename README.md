@@ -1,4 +1,6 @@
-# Suave playground
+# Builder Playground
+
+The builder playground is a tool to quickly deploy a local end-to-end environment to test an Ethereum L1 builder.
 
 Run the playground:
 
