@@ -48,7 +48,7 @@ var resetFlag bool
 var useBinPathFlag bool
 
 var rootCmd = &cobra.Command{
-	Use:   "crucible",
+	Use:   "playground",
 	Short: "",
 	Long:  ``,
 	RunE: func(cmd *cobra.Command, args []string) error {

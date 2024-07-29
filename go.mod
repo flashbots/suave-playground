@@ -6,7 +6,7 @@ require (
 	github.com/alicebob/miniredis/v2 v2.32.1
 	github.com/ethereum/go-ethereum v1.13.14
 	github.com/flashbots/go-boost-utils v1.8.0
-	github.com/flashbots/mev-boost-relay v0.29.2-0.20240716110640-cd42336bd069
+	github.com/flashbots/mev-boost-relay v0.29.2-0.20240705093628-4d4478a9c9dc
 	github.com/hashicorp/go-uuid v1.0.3
 	github.com/prysmaticlabs/prysm/v5 v5.0.0
 	github.com/sirupsen/logrus v1.9.3

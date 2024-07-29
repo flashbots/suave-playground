@@ -77,7 +77,7 @@ func New(config *Config) (*MevBoostRelay, error) {
 	log.Info("Beacon client synced")
 
 	// get the spec and genesis info to compute the eth network details
-	spec, err := bClient.GetSpec()
+	spec, err := getSpec(config.BeaconClientAddr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get spec: %w", err)
 	}
@@ -195,13 +195,13 @@ func (m *MevBoostRelay) Start() error {
 	return err
 }
 
-func generateEthNetworkDetails(spec *beaconclient.GetSpecResponse, info *beaconclient.GetGenesisResponse) (*common.EthNetworkDetails, error) {
+func generateEthNetworkDetails(spec *Spec, info *beaconclient.GetGenesisResponse) (*common.EthNetworkDetails, error) {
 	envs := map[string]string{
 		"GENESIS_FORK_VERSION":    info.Data.GenesisForkVersion,
 		"GENESIS_VALIDATORS_ROOT": info.Data.GenesisValidatorsRoot,
-		"BELLATRIX_FORK_VERSION":  spec.Data.BellatrixForkVersion,
-		"CAPELLA_FORK_VERSION":    spec.Data.CapellaForkVersion,
-		"DENEB_FORK_VERSION":      spec.Data.DenebForkVersion,
+		"BELLATRIX_FORK_VERSION":  spec.BellatrixForkVersion,
+		"CAPELLA_FORK_VERSION":    spec.CapellaForkVersion,
+		"DENEB_FORK_VERSION":      spec.DenebForkVersion,
 	}
 	for k, v := range envs {
 		if err := os.Setenv(k, v); err != nil {
@@ -408,4 +408,41 @@ func filterPayload(entry *database.DeliveredPayloadEntry, filter database.GetPay
 	}
 
 	return false
+}
+
+type Spec struct {
+	SecondsPerSlot                  uint64 `json:"SECONDS_PER_SLOT,string"`            //nolint:tagliatelle
+	DepositContractAddress          string `json:"DEPOSIT_CONTRACT_ADDRESS"`           //nolint:tagliatelle
+	DepositNetworkID                string `json:"DEPOSIT_NETWORK_ID"`                 //nolint:tagliatelle
+	DomainAggregateAndProof         string `json:"DOMAIN_AGGREGATE_AND_PROOF"`         //nolint:tagliatelle
+	InactivityPenaltyQuotient       string `json:"INACTIVITY_PENALTY_QUOTIENT"`        //nolint:tagliatelle
+	InactivityPenaltyQuotientAltair string `json:"INACTIVITY_PENALTY_QUOTIENT_ALTAIR"` //nolint:tagliatelle
+	BellatrixForkVersion            string `json:"BELLATRIX_FORK_VERSION"`             //nolint:tagliatelle
+	CapellaForkVersion              string `json:"CAPELLA_FORK_VERSION"`               //nolint:tagliatelle
+	DenebForkVersion                string `json:"DENEB_FORK_VERSION"`                 //nolint:tagliatelle
+}
+
+func getSpec(beaconURL string) (*Spec, error) {
+	uri := fmt.Sprintf("%s/eth/v1/config/spec", beaconURL)
+
+	resp, err := http.Get(uri)
+	if err != nil {
+		return nil, err
+	}
+
+	defer resp.Body.Close()
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var spec struct {
+		Data *Spec `json:"data"`
+	}
+	if err := json.Unmarshal(data, &spec); err != nil {
+		return nil, err
+	}
+
+	return spec.Data, nil
 }
