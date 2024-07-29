@@ -23,7 +23,7 @@ jobs:
         run: echo "Build for tag ${{ github.ref_name }}"
 
       - name: Create release
-        run: make release
+        run: make ci-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ github.ref_name }}
