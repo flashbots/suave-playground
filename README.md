@@ -1,6 +1,10 @@
 # Builder Playground
 
-The builder playground is a tool to quickly deploy a local end-to-end environment to test an Ethereum L1 builder.
+The builder playground is a tool to deploy an end-to-end environment to locally test an Ethereum L1 builder. It deploys:
+
+- A beacon node + validator client (lighthouse).
+- An execution client (reth).
+- An in-memory mev-boost-relay.
 
 Run the playground:
 
