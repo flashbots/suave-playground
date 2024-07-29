@@ -99,7 +99,7 @@ func DownloadArtifacts() (map[string]string, error) {
 				releasesURL := fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/%s-%s-%s.tar.gz", artifact.Org, artifact.Name, artifact.Version, artifact.Name, artifact.Version, archVersion)
 				fmt.Printf("Downloading %s: %s\n", outPath, releasesURL)
 
-				if err := downloadArtifact(releasesURL, artifact.Name, filepath.Join(customHomeDir, artifact.Name+"-"+artifact.Version)); err != nil {
+				if err := downloadArtifact(releasesURL, artifact.Name, outPath); err != nil {
 					return nil, fmt.Errorf("error downloading artifact: %v", err)
 				}
 			}
