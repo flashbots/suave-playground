@@ -91,6 +91,39 @@ var validateCmd = &cobra.Command{
 		log := mevRCommon.LogSetup(false, "info")
 		clt := beaconclient.NewProdBeaconInstance(log, "http://localhost:3500", "http://localhost:3500")
 
+		{
+			// If the chain has not started yet, wait for it to start.
+			// Otherwise, the subscription will not return any data.
+			bClient := beaconclient.NewMultiBeaconClient(log, []beaconclient.IBeaconInstance{
+				clt,
+			})
+
+			isReady := func() bool {
+				sync, err := bClient.BestSyncStatus()
+				if err != nil {
+					return false
+				}
+				return sync.HeadSlot > 1
+			}
+
+			if !isReady() {
+				syncTimeoutCh := time.After(30 * time.Second)
+				for {
+					if isReady() {
+						break
+					}
+					select {
+					case <-syncTimeoutCh:
+						return fmt.Errorf("beacon client failed to start")
+					default:
+						time.Sleep(1 * time.Second)
+					}
+				}
+			}
+		}
+
+		log.Infof("Chain is alive. Subscribing to head events")
+
 		ch := make(chan beaconclient.HeadEventData)
 		go clt.SubscribeToHeadEvents(ch)
 
