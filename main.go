@@ -46,6 +46,7 @@ var defaultJWTToken = "04592280e1778419b7aa954d43871cb2cfb2ebda754fb735e8adeb293
 var outputFlag string
 var resetFlag bool
 var useBinPathFlag bool
+var validateFlag bool
 
 var rootCmd = &cobra.Command{
 	Use:   "playground",
@@ -61,7 +62,21 @@ var downloadArtifactsCmd = &cobra.Command{
 	Short: "Download the artifacts",
 	Long:  `Download the artifacts`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		_, err := artifacts.DownloadArtifacts()
+		bins, err := artifacts.DownloadArtifacts()
+		if err != nil {
+			return err
+		}
+
+		if validateFlag {
+			for _, path := range bins {
+				// make sure you can run the binary
+				// In this case, both reth and lighthouse have the --version flag
+				cmd := exec.Command(path, "--version")
+				if err := cmd.Run(); err != nil {
+					return fmt.Errorf("error running %s: %v", path, err)
+				}
+			}
+		}
 		return err
 	},
 }
@@ -102,7 +117,8 @@ func main() {
 	rootCmd.Flags().StringVar(&outputFlag, "output", "local-testnet", "")
 	rootCmd.Flags().BoolVar(&resetFlag, "reset", false, "")
 	rootCmd.Flags().BoolVar(&useBinPathFlag, "use-bin-path", false, "")
-	downloadArtifactsCmd.Flags().Uint64Var(&numBlocksValidate, "num-blocks", 5, "")
+	downloadArtifactsCmd.Flags().BoolVar(&validateFlag, "validate", false, "")
+	validateCmd.Flags().Uint64Var(&numBlocksValidate, "num-blocks", 5, "")
 
 	rootCmd.AddCommand(downloadArtifactsCmd)
 	rootCmd.AddCommand(validateCmd)
