@@ -9,5 +9,5 @@ ci-release:
 		-v `pwd`:/go/src/$(PACKAGE_NAME) \
 		-v `pwd`/sysroot:/sysroot \
 		-w /go/src/$(PACKAGE_NAME) \
-		ghcr.io/goreleaser/goreleaser-cross:v1.19.5 \
+		ghcr.io/goreleaser/goreleaser-cross:v1.21.12 \
 		release --clean --auto-snapshot
